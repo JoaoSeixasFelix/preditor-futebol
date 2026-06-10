@@ -53,6 +53,19 @@
   .tot{border-top:1px solid var(--line);margin-top:8px;padding-top:10px;}
   .tot .ln{display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px;}
   .tot .ln .mut{color:var(--mut);} .ev{margin-top:8px;font-size:13px;font-weight:600;}
+  .pthead{display:grid;gap:4px;font-size:11px;color:var(--mut);padding:2px 8px 4px;text-align:center;}
+  .pthead :first-child{text-align:left;}
+  .ptrow{display:grid;gap:4px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin-bottom:5px;}
+  .pn{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pn .ps{color:var(--mut);font-size:11px;}
+  .tdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  .tdot.h{background:#7f77dd}.tdot.a{background:#2a9d8a}
+  .pcell{background:var(--card2);border:1px solid var(--line);border-radius:8px;text-align:center;padding:3px 0;cursor:pointer;}
+  .pcell b{display:block;font-size:13px;}
+  .pcell i{font-style:normal;font-size:10px;color:var(--mut);}
+  .pcell:active{border-color:var(--ac);}
+  .pmrest.closed{display:none;}
+  .more{width:100%;background:none;border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:8px;font-size:13px;margin:2px 0 10px;}
   .hrow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px;font-size:13px;}
   .dot{width:9px;height:9px;border-radius:50%;flex:none;}
   .dot.vit{background:var(--ok);} .dot.emp{background:var(--mut);} .dot.der{background:var(--bad);}
@@ -246,40 +259,61 @@ function renderPlayers(){
     const p=predict(comp,h,a);
     const cardM=C.lg.hcard!==undefined?p.ek/(C.lg.hcard+C.lg.acard):1, k=5;
     const todos=[];
-    [[h,th,p.lh],[a,ta,p.la]].forEach(([time,ps,lado])=>{
+    [[h,th,p.lh,'h'],[a,ta,p.la,'a']].forEach(([time,ps,lado,cls])=>{
       const attM=lado/C.lg.hg;
       ps.forEach(pl=>{
         const pr=PRIOR[pl.pos]||PRIOR.M;
-        const lg_=pRate(pl.g,pl.st,pr.g,k)*attM;
-        const lsh=pRate(pl.sh,pl.st,pr.sh,k)*attM;
-        const lsog=pRate(pl.sog,pl.st,pr.sog,k)*attM;
-        const lfc=pRate(pl.fc,pl.st,pr.fc,k);
-        const lcd=pRate(pl.yc+pl.rc,pl.st,pr.cd,k)*cardM;
-        todos.push({time,n:pl.n,pos:pl.pos,
-          marca:1-Math.exp(-lg_), sog1:1-Math.exp(-lsog),
-          fin2:1-Math.exp(-lsh)*(1+lsh),
-          cart:Math.min(1-Math.exp(-lcd),.75),
-          falt2:1-Math.exp(-lfc)*(1+lfc)});
+        todos.push({time,cls,n:pl.n,pos:pl.pos,
+          lg:pRate(pl.g,pl.st,pr.g,k)*attM,
+          lsh:pRate(pl.sh,pl.st,pr.sh,k)*attM,
+          lsog:pRate(pl.sog,pl.st,pr.sog,k)*attM,
+          lfc:pRate(pl.fc,pl.st,pr.fc,k),
+          pcard:Math.min(1-Math.exp(-pRate(pl.yc+pl.rc,pl.st,pr.cd,k)*cardM),.75)});
       });
     });
-    const MKS=[['marca','Jogador marca a qualquer momento'],['sog1','Jogador: 1+ chute no gol'],
-      ['fin2','Jogador: 2+ finalizacoes'],['cart','Jogador toma cartao'],['falt2','Jogador: 2+ faltas cometidas']];
+    const pge=(l,n)=>{let c=0,t=1;for(let i=0;i<n;i++){c+=t;t*=l/(i+1);}return 1-Math.exp(-l)*c;};
+    const TABS=[
+      ['Jogador - Gols','lg',[1,2],'gol(s)'],
+      ['Jogador - Chutes ao gol','lsog',[1,2,3],'chute(s) no gol'],
+      ['Jogador - Finalizacoes','lsh',[1,2,3],'finalizacao(oes)'],
+      ['Jogador - Faltas cometidas','lfc',[1,2,3],'falta(s)'],
+      ['Jogador - Cartao','pcard',null,'cartao']
+    ];
     let html='<div class="grp"><span>Jogadores · so convocados <span style="text-transform:none">(estimativa, se jogar)</span></span></div>';
-    MKS.forEach(([key,titulo])=>{
-      html+='<div class="grp"><span>'+titulo+' <span class="chev">▾</span></span></div><div class="gwrap">';
-      todos.slice().sort((x,y)=>y[key]-x[key]).forEach(j=>{
-        const prob=j[key];
-        if(!isFinite(prob)||prob<=0)return;
-        const pct=prob*100,pcs=pct>=1?Math.round(pct)+'%':'<1%';
-        const fr=prob>0?(1/prob).toFixed(2):'-';
-        const lbl=j.n+' ('+j.time+'): '+titulo.replace('Jogador: ','').replace('Jogador ','');
-        html+='<div class="mk"><i class="fill" style="width:'+Math.round(pct)+'%"></i><span class="nm">'+j.n+' <span class="cd">'+j.time+' · '+j.pos+'</span></span><span class="rt"><span class="pc">'+pcs+'</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+lbl+'|'+prob+'">+</button></span></div>';
+    const cell=(prob,lbl)=>{
+      if(!isFinite(prob)||prob<=0)return '<span></span>';
+      const pct=prob*100,pcs=pct>=1?Math.round(pct)+'%':'<1%';
+      const fr=(prob>=0.005&&prob<1)?(1/prob).toFixed(2):'-';
+      return '<span class="pcell" data-l="'+h+' x '+a+' · '+lbl+'|'+prob+'"><b>'+pcs+'</b><i>'+fr+'</i></span>';
+    };
+    TABS.forEach(([titulo,key,lines,suf])=>{
+      const cols=lines?lines.length:1;
+      const gt='style="grid-template-columns:1fr repeat('+cols+',58px)"';
+      const sorted=todos.slice().sort((x,y)=>{
+        const px=lines?pge(x[key],lines[0]):x[key], py=lines?pge(y[key],lines[0]):y[key];
+        return py-px;
       });
-      html+='</div>';
+      let head='<div class="pthead" '+gt+'><span></span>'+(lines?lines.map(n=>'<span>'+n+'+</span>').join(''):'<span>Sim</span>')+'</div>';
+      const row=j=>{
+        let cs='';
+        if(lines)lines.forEach(n=>{cs+=cell(pge(j[key],n), j.n+' ('+j.time+'): '+n+'+ '+suf);});
+        else cs=cell(j[key], j.n+' ('+j.time+'): toma '+suf);
+        return '<div class="ptrow" '+gt+'><span class="pn"><i class="tdot '+j.cls+'"></i>'+j.n+' <span class="ps">'+j.pos+'</span></span>'+cs+'</div>';
+      };
+      const vis=sorted.slice(0,6).map(row).join('');
+      const resto=sorted.slice(6).map(row).join('');
+      html+='<div class="grp"><span>'+titulo+' <span class="chev">▾</span></span></div><div class="gwrap">'+head+vis+
+        (resto?'<div class="pmrest closed">'+resto+'</div><button class="more">Mostrar mais ▾</button>':'')+'</div>';
     });
     box.innerHTML=html;
-    box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pp]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pp)});renderSlip();});
-    box.querySelectorAll('.grp').forEach(g=>{g.onclick=()=>{
+    box.querySelectorAll('.pcell').forEach(b=>b.onclick=()=>{const[t,pp]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pp)});renderSlip();});
+    box.querySelectorAll('.more').forEach(b=>b.onclick=()=>{
+      const r=b.previousElementSibling;
+      r.classList.toggle('closed');
+      b.textContent=r.classList.contains('closed')?'Mostrar mais ▾':'Mostrar menos ▴';
+    });
+    box.querySelectorAll('.grp').forEach(g=>{g.onclick=e=>{
+      if(e.target.closest('.pcell,.more'))return;
       const w=g.nextElementSibling;
       if(!w||!w.classList.contains('gwrap'))return;
       w.classList.toggle('closed');
