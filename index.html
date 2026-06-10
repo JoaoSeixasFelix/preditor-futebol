@@ -144,7 +144,10 @@ function predict(comp,h,a){
   if(C.h2h){const pk=C.h2h[[h,a].slice().sort().join('|')];if(pk){ekAdj=0.2*pk[1]*pk[0]/(pk[0]+3);ek=Math.max(ek+ekAdj,1);}}
   const oc=l=>{let t=0;for(let k=0;k<=l;k++)t+=nb(k,C.r_corners,ec);return 1-t;};
   const ok=l=>{let t=0;for(let k=0;k<=l;k++)t+=pois(k,ek);return 1-t;};
-  return {...r,lh,la,ec,ek,ekAdj,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),
+  const heat=ek/(C.lg.hcard+C.lg.acard);
+  const er=((C.lg.hred!==undefined?C.lg.hred:0.12)+(C.lg.ared!==undefined?C.lg.ared:0.13))*heat;
+  const redm=1-Math.exp(-er);
+  return {...r,lh,la,ec,ek,ekAdj,heat,redm,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),
     c75:oc(7),c125:oc(12),cu85:1-oc(8),cu105:1-oc(10),
     k35:ok(3),k45:ok(4),k55:ok(5),k25:ok(2),k65:ok(6),ku35:1-ok(3),ku45:1-ok(4)};
 }
@@ -165,7 +168,7 @@ const GG=[
 const GC=[
  ["Escanteios",1,[["c85","Over 8.5",""],["c95","Over 9.5",""],["c105","Over 10.5",""],["c115","Over 11.5",""]]],
  ["Escanteios - alternativas",0,[["c75","Over 7.5",""],["c125","Over 12.5",""],["cu85","Under 8.5",""],["cu105","Under 10.5",""]]],
- ["Cartoes",1,[["k35","Over 3.5",""],["k45","Over 4.5",""],["k55","Over 5.5",""]]],
+ ["Cartoes",1,[["k35","Over 3.5",""],["k45","Over 4.5",""],["k55","Over 5.5",""],["redm","Cartão vermelho no jogo",""]]],
  ["Cartoes - alternativas",0,[["k25","Over 2.5",""],["k65","Over 6.5",""],["ku35","Under 3.5",""],["ku45","Under 4.5",""]]]
 ];
 const compSel=document.getElementById('comp'),hs=document.getElementById('home'),as=document.getElementById('away');
@@ -294,12 +297,14 @@ function renderPlayers(){
       const attM=lado/C.lg.hg;
       ps.forEach(pl=>{
         const pr=PRIOR[pl.pos]||PRIOR.M;
+        const PRR={F:.008,M:.010,D:.013,G:.004};
         todos.push({time,cls,n:pl.n,pos:pl.pos,j:pl.j||'',flag:flags[time]||'',
           lg:pRate(pl.g,pl.st,pr.g,k)*attM,
           lsh:pRate(pl.sh,pl.st,pr.sh,k)*attM,
           lsog:pRate(pl.sog,pl.st,pr.sog,k)*attM,
           lfc:pRate(pl.fc,pl.st,pr.fc,k),
-          pcard:Math.min(1-Math.exp(-pRate(pl.yc+pl.rc,pl.st,pr.cd,k)*cardM),.75)});
+          pyel:Math.min(1-Math.exp(-pRate(pl.yc,pl.st,pr.cd*0.92,k)*cardM),.75),
+          pred_:Math.min(1-Math.exp(-pRate(pl.rc,pl.st,(PRR[pl.pos]!==undefined?PRR[pl.pos]:.01),8)*cardM),.30)});
       });
     });
     const pge=(l,n)=>{let c=0,t=1;for(let i=0;i<n;i++){c+=t;t*=l/(i+1);}return 1-Math.exp(-l)*c;};
@@ -308,7 +313,8 @@ function renderPlayers(){
       ['Jogador - Chutes ao gol','lsog',[1,2,3],'chute(s) no gol'],
       ['Jogador - Finalizacoes','lsh',[1,2,3],'finalizacao(oes)'],
       ['Jogador - Faltas cometidas','lfc',[1,2,3],'falta(s)'],
-      ['Jogador - Cartao','pcard',null,'cartao']
+      ['Jogador - Cartao amarelo','pyel',null,'cartao amarelo'],
+      ['Jogador - Cartao vermelho','pred_',null,'cartao vermelho']
     ];
     let html='<div class="grp"><span>Jogadores · so convocados <span style="text-transform:none">(estimativa, se jogar)</span></span></div>';
     const cell=(prob,lbl)=>{
@@ -328,7 +334,7 @@ function renderPlayers(){
       const row=j=>{
         let cs='';
         if(lines)lines.forEach(n=>{cs+=cell(pge(j[key],n), j.n+' ('+j.time+'): '+n+'+ '+suf);});
-        else cs=cell(j[key], j.n+' ('+j.time+'): toma '+suf);
+        else cs=cell(j[key], j.n+' ('+j.time+'): '+suf);
         const ic=j.flag?'<img class="pflag" src="'+j.flag+'" loading="lazy" alt="">':'<i class="tdot '+j.cls+'"></i>';
         return '<div class="ptrow" '+gt+'><span class="pn">'+ic+(j.j?'<span class="pnum">'+j.j+'</span>':'')+j.n+' <span class="ps">'+j.pos+'</span></span>'+cs+'</div>';
       };

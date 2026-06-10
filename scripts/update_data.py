@@ -71,7 +71,8 @@ def liga_main(code):
             gols.append(base)
             try:
                 full.append({**base, "hc": int(r["HC"]), "ac": int(r["AC"]),
-                             "hk": int(r["HY"])+int(r["HR"]), "ak": int(r["AY"])+int(r["AR"])})
+                             "hk": int(r["HY"])+int(r["HR"]), "ak": int(r["AY"])+int(r["AR"]),
+                             "hr": int(r["HR"]), "ar": int(r["AR"])})
             except (ValueError, KeyError):
                 pass
     d = _build_full(full) if len(full) >= 150 else (_build_gols(gols) if len(gols) >= 50 else None)
@@ -92,6 +93,8 @@ def _build_full(jogos):
     LG = {k: wmean([(j[k], j["w"]) for j in jogos]) for k in ["hg","ag","hc","ac"]}
     LG["hcard"] = wmean([(j["hk"], j["w"]) for j in jogos])
     LG["acard"] = wmean([(j["ak"], j["w"]) for j in jogos])
+    LG["hred"] = wmean([(j["hr"], j["w"]) for j in jogos])
+    LG["ared"] = wmean([(j["ar"], j["w"]) for j in jogos])
     ct = [j["hc"]+j["ac"] for j in jogos]
     m, v = statistics.mean(ct), statistics.variance(ct)
     rc = m*m/(v-m) if v > m else 60.0
@@ -240,11 +243,14 @@ def load_apif_means():
         hc = sum(r["hc"] for r in rows)/n; ac = sum(r["ac"] for r in rows)/n
         hcard = sum(r["hy"]+r["hr"] for r in rows)/n
         acard = sum(r["ay"]+r["ar"] for r in rows)/n
+        hred = sum(r["hr"] for r in rows)/n
+        ared = sum(r["ar"] for r in rows)/n
         tots = [r["hc"]+r["ac"] for r in rows]
         m = sum(tots)/n; v_ = sum((t-m)**2 for t in tots)/max(n-1,1)
         r_ = m*m/(v_-m) if v_ > m else 60.0
         out[lid] = {"hc": round(hc,4), "ac": round(ac,4), "hcard": round(hcard,4),
-                    "acard": round(acard,4), "r": round(r_,2), "n": n}
+                    "acard": round(acard,4), "hred": round(hred,4), "ared": round(ared,4),
+                    "r": round(r_,2), "n": n}
     return out
 
 # ---------------------------------------------------------------------------
@@ -346,7 +352,7 @@ def calibrate(fulls):
             p_def_ca += [(t["def_h"], t["ca_h"]), (t["def_a"], t["ca_a"])]
             p_def_kf += [(t["def_h"], t["kf_h"]), (t["def_a"], t["kf_a"])]
     n = len(lgs) or 1
-    glob = {k: round(sum(l[k] for l in lgs)/n, 4) for k in ["hc","ac","hcard","acard"]}
+    glob = {k: round(sum(l[k] for l in lgs)/n, 4) for k in ["hc","ac","hcard","acard","hred","ared"]}
     glob["r"] = round(sum(rs)/n, 2)
     return {"glob": glob,
             "b_cf": fit_exponent(p_atk_cf, 0.7),
@@ -358,7 +364,8 @@ def synthesize(comp, cal, meas=None):
     meas = medias MEDIDAS da propria competicao (API-Football 2022-24);
     quando presentes, substituem o baseline europeu."""
     g = meas or cal["glob"]
-    comp["lg"].update({"hc": g["hc"], "ac": g["ac"], "hcard": g["hcard"], "acard": g["acard"]})
+    comp["lg"].update({"hc": g["hc"], "ac": g["ac"], "hcard": g["hcard"], "acard": g["acard"],
+                       "hred": g.get("hred", cal["glob"]["hred"]), "ared": g.get("ared", cal["glob"]["ared"])})
     comp["r_corners"] = g["r"]
     comp["est"] = True
     if meas: comp["meas_base"] = True
