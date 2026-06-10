@@ -60,6 +60,8 @@
   .pn .ps{color:var(--mut);font-size:11px;}
   .tdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
   .tdot.h{background:#7f77dd}.tdot.a{background:#2a9d8a}
+  .pflag{width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:-3px;}
+  .pnum{display:inline-block;min-width:16px;text-align:center;color:var(--mut);font-size:11px;margin-right:4px;}
   .pcell{background:var(--card2);border:1px solid var(--line);border-radius:8px;text-align:center;padding:3px 0;cursor:pointer;}
   .pcell b{display:block;font-size:13px;}
   .pcell i{font-style:normal;font-size:10px;color:var(--mut);}
@@ -259,11 +261,12 @@ function renderPlayers(){
     const p=predict(comp,h,a);
     const cardM=C.lg.hcard!==undefined?p.ek/(C.lg.hcard+C.lg.acard):1, k=5;
     const todos=[];
+    const flags=data.flags||{};
     [[h,th,p.lh,'h'],[a,ta,p.la,'a']].forEach(([time,ps,lado,cls])=>{
       const attM=lado/C.lg.hg;
       ps.forEach(pl=>{
         const pr=PRIOR[pl.pos]||PRIOR.M;
-        todos.push({time,cls,n:pl.n,pos:pl.pos,
+        todos.push({time,cls,n:pl.n,pos:pl.pos,j:pl.j||'',flag:flags[time]||'',
           lg:pRate(pl.g,pl.st,pr.g,k)*attM,
           lsh:pRate(pl.sh,pl.st,pr.sh,k)*attM,
           lsog:pRate(pl.sog,pl.st,pr.sog,k)*attM,
@@ -298,7 +301,8 @@ function renderPlayers(){
         let cs='';
         if(lines)lines.forEach(n=>{cs+=cell(pge(j[key],n), j.n+' ('+j.time+'): '+n+'+ '+suf);});
         else cs=cell(j[key], j.n+' ('+j.time+'): toma '+suf);
-        return '<div class="ptrow" '+gt+'><span class="pn"><i class="tdot '+j.cls+'"></i>'+j.n+' <span class="ps">'+j.pos+'</span></span>'+cs+'</div>';
+        const ic=j.flag?'<img class="pflag" src="'+j.flag+'" loading="lazy" alt="">':'<i class="tdot '+j.cls+'"></i>';
+        return '<div class="ptrow" '+gt+'><span class="pn">'+ic+(j.j?'<span class="pnum">'+j.j+'</span>':'')+j.n+' <span class="ps">'+j.pos+'</span></span>'+cs+'</div>';
       };
       const vis=sorted.slice(0,6).map(row).join('');
       const resto=sorted.slice(6).map(row).join('');

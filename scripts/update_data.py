@@ -270,15 +270,18 @@ def players_wc(nossos_times):
     except (ValueError, KeyError, IndexError): return os.path.exists(path)
     OVR = {"usa": "United States", "bosnia herzegovina": "Bosnia and Herzegovina",
            "congo dr": "DR Congo", "türkiye": "Turkey", "turkiye": "Turkey",
-           "czechia": "Czech Republic", "ivory coast": "Ivory Coast",
-           "south korea": "South Korea", "iran": "Iran"}
-    nmap = {}
+           "curacao": "Curaçao", "czechia": "Czech Republic",
+           "ivory coast": "Ivory Coast", "south korea": "South Korea", "iran": "Iran"}
+    nmap, flagmap = {}, {}
     norm = lambda s: s.lower().replace("-", " ").strip()
     nossos_norm = {norm(t): t for t in nossos_times}
     for t in lista:
         dn = t["team"]["displayName"]
         alvo = OVR.get(norm(dn)) or nossos_norm.get(norm(dn))
-        if alvo and alvo in nossos_times: nmap[t["team"]["id"]] = alvo
+        if alvo and alvo in nossos_times:
+            nmap[t["team"]["id"]] = alvo
+            logos = t["team"].get("logos", [])
+            if logos: flagmap[alvo] = logos[0]["href"]
         else: print(f"  players: sem match p/ '{dn}'")
     out, idx = {}, ["starts","foulsCommitted","foulsSuffered","yellowCards",
                     "redCards","totalGoals","goalAssists","totalShots","shotsOnTarget","offsides"]
@@ -305,6 +308,7 @@ def players_wc(nossos_times):
                 except ValueError: pass
             jogadores.append({"n": a.get("shortName") or a.get("fullName"),
                 "pos": (a.get("position") or {}).get("abbreviation", "?"),
+                "j": a.get("jersey") or "",
                 "st": tot[0], "fc": tot[1], "yc": tot[3], "rc": tot[4],
                 "g": tot[5], "sh": tot[7], "sog": tot[8]})
         out[nosso] = jogadores
@@ -312,7 +316,7 @@ def players_wc(nossos_times):
     if len(out) < 30: return os.path.exists(path)
     os.makedirs("players", exist_ok=True)
     _json.dump({"fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-                "teams": out}, open(path, "w"), ensure_ascii=False)
+                "teams": out, "flags": flagmap}, open(path, "w"), ensure_ascii=False)
     return True
 
 # ---------------------------------------------------------------------------
