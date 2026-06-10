@@ -79,12 +79,13 @@
 </div>
 <div id="h2h"></div>
 <div id="markets"></div>
+<div id="players"></div>
 <div class="slip">
   <h2><span>🎟️ Multipla</span><button class="clr" id="clear">limpar</button></h2>
   <div id="slip"><div class="empty">Toque no + de qualquer mercado pra montar. Pode trocar jogo/campeonato e somar mais.</div></div>
   <div id="totals"></div>
 </div>
-<p class="foot">Selecoes: ~49 mil jogos reais (1872-2026). Clubes: football-data.co.uk. Em ligas marcadas "(estimativa)", a fonte nao publica escanteios/cartoes: os valores sao estimados pelo modelo a partir da forca de ataque/defesa, calibrada em ~20 mil jogos das ligas completas. Multipla assume independencia. Modelo estatistico, nao garantia. Aposte com responsabilidade. +18.</p>
+<p class="foot">Selecoes: ~49 mil jogos reais (1872-2026). Clubes: football-data.co.uk. Em ligas marcadas "(estimativa)", a fonte nao publica escanteios/cartoes: os valores sao estimados pelo modelo a partir da forca de ataque/defesa, calibrada em ~20 mil jogos das ligas completas. Mercados de jogador: apenas os convocados oficiais do torneio; probabilidades sao CONDICIONAIS a jogar (taxas de clube+selecao da temporada, sem escalacao confirmada). Multipla assume independencia. Modelo estatistico, nao garantia. Aposte com responsabilidade. +18.</p>
 <script>
 let ALL={};
 const fact=n=>{let r=1;for(let i=2;i<=n;i++)r*=i;return r;};
@@ -226,7 +227,70 @@ function renderMarkets(){
     if(c)c.textContent=w.classList.contains('closed')?'▸':'▾';
   };});
   box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pr]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pr)});renderSlip();});
-  renderH2H();
+  renderH2H();renderPlayers();
+}
+const PLC={};
+const PRIOR={F:{g:.35,sh:2.2,sog:.9,fc:1.0,cd:.10},M:{g:.12,sh:1.1,sog:.4,fc:1.3,cd:.15},
+             D:{g:.04,sh:.5,sog:.15,fc:1.1,cd:.18},G:{g:.003,sh:.05,sog:.02,fc:.25,cd:.04}};
+function pRate(num,st,prior,k){return (num+prior*k)/(st+k);}
+function renderPlayers(){
+  const comp=compSel.value,C=ALL[comp],box=document.getElementById('players');
+  box.innerHTML='';
+  if(!C||!C.pl||!C.slug)return;
+  const h=selH,a=selA;
+  if(!C.times[h]||!C.times[a]||h===a)return;
+  const paint=data=>{
+    if(compSel.value!==comp||selH!==h||selA!==a)return;
+    const th=data.teams[h]||[], ta=data.teams[a]||[];
+    if(!th.length&&!ta.length)return;
+    let opts='';
+    [[h,th],[a,ta]].forEach(([t,ps])=>{
+      if(!ps.length)return;
+      opts+='<optgroup label="'+t+'">';
+      ps.slice().sort((x,y)=>y.st-x.st).forEach((pl,i0)=>{
+        opts+='<option value="'+t+'|'+pl.n+'">'+pl.n+' · '+pl.pos+' ('+pl.st+'j)</option>';
+      });
+      opts+='</optgroup>';
+    });
+    box.innerHTML='<div class="grp"><span>Jogador · convocados da Copa <span style="text-transform:none">(estimativa, se jogar)</span></span></div>'+
+      '<select id="plSel" style="margin-bottom:8px">'+opts+'</select><div id="plMk"></div>';
+    const sel=document.getElementById('plSel');
+    const show=()=>{
+      const[time,nome]=sel.value.split('|');
+      const ps=(data.teams[time]||[]).find(x=>x.n===nome);
+      if(!ps)return;
+      const p=predict(comp,h,a);
+      const lado=(time===h)?p.lh:p.la;
+      const attM=lado/C.lg.hg, cardM=C.lg.hcard!==undefined?p.ek/(C.lg.hcard+C.lg.acard):1;
+      const pr=PRIOR[ps.pos]||PRIOR.M, k=5;
+      const lg_=pRate(ps.g,ps.st,pr.g,k)*attM;
+      const lsh=pRate(ps.sh,ps.st,pr.sh,k)*attM;
+      const lsog=pRate(ps.sog,ps.st,pr.sog,k)*attM;
+      const lfc=pRate(ps.fc,ps.st,pr.fc,k);
+      const lcd=pRate(ps.yc+ps.rc,ps.st,pr.cd,k)*cardM;
+      const mks=[
+        ['Marca a qualquer momento',1-Math.exp(-lg_)],
+        ['1+ chute no gol',1-Math.exp(-lsog)],
+        ['2+ finalizacoes',1-Math.exp(-lsh)*(1+lsh)],
+        ['Toma cartao',Math.min(1-Math.exp(-lcd),.75)],
+        ['2+ faltas cometidas',1-Math.exp(-lfc)*(1+lfc)]
+      ];
+      let html='';
+      mks.forEach(([nm,prob])=>{
+        if(!isFinite(prob)||prob<=0)return;
+        const pct=prob*100,pcs=pct>=1?Math.round(pct)+'%':'<1%';
+        const fr=(1/prob).toFixed(2);
+        const lbl=nome+': '+nm;
+        html+='<div class="mk"><i class="fill" style="width:'+Math.round(pct)+'%"></i><span class="nm">'+nm+'</span><span class="rt"><span class="pc">'+pcs+'</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+lbl+'|'+prob+'">+</button></span></div>';
+      });
+      const mk=document.getElementById('plMk');
+      mk.innerHTML=html;
+      mk.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pp]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pp)});renderSlip();});
+    };
+    sel.onchange=show;show();
+  };
+  if(PLC[C.slug]){paint(PLC[C.slug]);return;}
+  fetch('players/'+C.slug+'.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(d=>{if(d){PLC[C.slug]=d;paint(d);}}).catch(()=>{});
 }
 const H2HC={};
 function renderH2H(){

@@ -248,6 +248,74 @@ def load_apif_means():
     return out
 
 # ---------------------------------------------------------------------------
+# Jogadores da COPA 2026 (ESPN): SO os 26 convocados de cada selecao.
+# Stats por jogador (overview) somam clube+selecao e viram taxas por jogo.
+# Refresh semanal (arquivo guarda fetched_at); falha nunca quebra o site.
+# ---------------------------------------------------------------------------
+def players_wc(nossos_times):
+    import json as _json, os, time
+    path = "players/copa-do-mundo.json"
+    if os.path.exists(path):
+        try:
+            antigo = _json.load(open(path))
+            idade = (datetime.datetime.now(datetime.timezone.utc)
+                     - datetime.datetime.fromisoformat(antigo["fetched_at"])).days
+            if idade < 7:
+                print(f"players: cache de {idade}d, mantido"); return True
+        except (ValueError, KeyError):
+            pass
+    txt = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/teams", timeout=40)
+    if not txt: return os.path.exists(path)
+    try: lista = _json.loads(txt)["sports"][0]["leagues"][0]["teams"]
+    except (ValueError, KeyError, IndexError): return os.path.exists(path)
+    OVR = {"usa": "United States", "bosnia herzegovina": "Bosnia and Herzegovina",
+           "congo dr": "DR Congo", "türkiye": "Turkey", "turkiye": "Turkey",
+           "czechia": "Czech Republic", "ivory coast": "Ivory Coast",
+           "south korea": "South Korea", "iran": "Iran"}
+    nmap = {}
+    norm = lambda s: s.lower().replace("-", " ").strip()
+    nossos_norm = {norm(t): t for t in nossos_times}
+    for t in lista:
+        dn = t["team"]["displayName"]
+        alvo = OVR.get(norm(dn)) or nossos_norm.get(norm(dn))
+        if alvo and alvo in nossos_times: nmap[t["team"]["id"]] = alvo
+        else: print(f"  players: sem match p/ '{dn}'")
+    out, idx = {}, ["starts","foulsCommitted","foulsSuffered","yellowCards",
+                    "redCards","totalGoals","goalAssists","totalShots","shotsOnTarget","offsides"]
+    for tid, nosso in nmap.items():
+        rtxt = fetch(f"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/teams/{tid}/roster", timeout=40)
+        if not rtxt: continue
+        try: ath = _json.loads(rtxt).get("athletes", [])
+        except ValueError: continue
+        jogadores = []
+        for a in ath:
+            time.sleep(0.15)
+            otxt = fetch(f"https://site.web.api.espn.com/apis/common/v3/sports/soccer/fifa.world/athletes/{a['id']}/overview", timeout=30)
+            tot = [0]*10
+            if otxt:
+                try:
+                    st = _json.loads(otxt).get("statistics") or {}
+                    nomes = st.get("names", [])
+                    for sp in st.get("splits", []):
+                        vals = sp.get("stats", [])
+                        for i, nm in enumerate(nomes):
+                            if nm in idx and i < len(vals):
+                                try: tot[idx.index(nm)] += int(float(vals[i]))
+                                except (ValueError, TypeError): pass
+                except ValueError: pass
+            jogadores.append({"n": a.get("shortName") or a.get("fullName"),
+                "pos": (a.get("position") or {}).get("abbreviation", "?"),
+                "st": tot[0], "fc": tot[1], "yc": tot[3], "rc": tot[4],
+                "g": tot[5], "sh": tot[7], "sog": tot[8]})
+        out[nosso] = jogadores
+        print(f"  players {nosso}: {len(jogadores)} convocados")
+    if len(out) < 30: return os.path.exists(path)
+    os.makedirs("players", exist_ok=True)
+    _json.dump({"fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                "teams": out}, open(path, "w"), ensure_ascii=False)
+    return True
+
+# ---------------------------------------------------------------------------
 # Selecoes (Copa do Mundo)
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -406,6 +474,13 @@ if __name__ == "__main__":
             print(f"{nome}: {len(d['times'])} times ({base})")
         else:
             print(f"{nome}: SEM DADOS, pulada")
+    # jogadores convocados da Copa (refresh semanal, nunca quebra)
+    try:
+        if "Copa do Mundo" in out and players_wc(set(out["Copa do Mundo"]["times"])):
+            out["Copa do Mundo"]["pl"] = 1
+            print("players: Copa do Mundo habilitada")
+    except Exception as e:
+        print(f"players: erro nao-fatal: {e}")
     # exporta confrontos por competicao (arquivos pequenos, carregados sob demanda)
     import os
     os.makedirs("h2h", exist_ok=True)
