@@ -136,6 +136,51 @@ def liga_extra(code):
     return _build_gols(jogos) if len(jogos) >= 50 else None
 
 # ---------------------------------------------------------------------------
+# Copas via API publica da ESPN (sem chave). Resultados dos ultimos ~30 meses,
+# peso decai com a idade (meia-vida 18 meses). So gols -> corners/cartoes
+# entram via estimativa calibrada, como nas ligas extras.
+# ---------------------------------------------------------------------------
+def copa_espn(slug):
+    import json as _json
+    hoje = datetime.date.today()
+    jogos = []
+    fim = hoje
+    for _ in range(10):  # 10 janelas de ~3 meses = ~30 meses
+        ini = fim - datetime.timedelta(days=91)
+        url = (f"https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/"
+               f"scoreboard?dates={ini:%Y%m%d}-{fim:%Y%m%d}&limit=500")
+        txt = fetch(url, timeout=40)
+        fim = ini - datetime.timedelta(days=1)
+        if not txt: continue
+        try: data = _json.loads(txt)
+        except ValueError: continue
+        for ev in data.get("events", []):
+            try:
+                if ev["status"]["type"]["state"] != "post": continue
+                comp = ev["competitions"][0]
+                lados = {c["homeAway"]: c for c in comp["competitors"]}
+                hg, ag = int(lados["home"]["score"]), int(lados["away"]["score"])
+                d = datetime.date.fromisoformat(ev["date"][:10])
+                w = 0.5 ** (((hoje - d).days) / 548.0)
+                jogos.append({"h": lados["home"]["team"]["displayName"],
+                              "a": lados["away"]["team"]["displayName"],
+                              "w": w, "hg": hg, "ag": ag})
+            except (KeyError, ValueError, IndexError):
+                continue
+    # dedup (janelas podem se sobrepor em eventos de borda)
+    vistos, unicos = set(), []
+    for j in jogos:
+        k = (j["h"], j["a"], j["hg"], j["ag"], round(j["w"], 4))
+        if k not in vistos: vistos.add(k); unicos.append(j)
+    return _build_gols(unicos) if len(unicos) >= 50 else None
+
+COPAS = {
+    "Libertadores (CONMEBOL)": "conmebol.libertadores",
+    "Sul-Americana (CONMEBOL)": "conmebol.sudamericana",
+    "Copa do Brasil (BRA)": "bra.copa_do_brazil",
+}
+
+# ---------------------------------------------------------------------------
 # Selecoes (Copa do Mundo)
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -265,6 +310,13 @@ if __name__ == "__main__":
     if sel:
         out["Copa do Mundo"] = synthesize(sel, cal)
         print(f"Copa do Mundo: {len(sel['times'])} selecoes (corners/cartoes estimados)")
+    for nome, slug in COPAS.items():
+        d = copa_espn(slug)
+        if d:
+            out[nome] = synthesize(d, cal)
+            print(f"{nome}: {len(d['times'])} times (ESPN, corners/cartoes estimados)")
+        else:
+            print(f"{nome}: SEM DADOS, pulada")
     for nome, d in main_results.items():
         out[nome] = d if d["type"] == "club" else synthesize(d, cal)
     for nome, code in EXTRA.items():
