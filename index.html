@@ -19,6 +19,8 @@
   label{font-size:12px;color:var(--mut);display:block;margin-bottom:5px;}
   select,input{width:100%;background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px 10px;font-size:15px;}
   .comp{margin-bottom:14px;}
+  #qr .hit{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px;cursor:pointer;}
+  #qr .hit .cc{color:var(--mut);font-size:12px;margin-left:10px;text-align:right;}
   .row{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end;margin-bottom:14px;}
   .x{color:var(--mut);padding-bottom:11px;text-align:center;}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
@@ -46,6 +48,7 @@
 <h1>⚽ Preditor de Futebol</h1>
 <div id="upd" style="font-size:11px;color:var(--mut);margin:-8px 0 12px;">carregando dados…</div>
 <div class="comp"><label>Campeonato</label><select id="comp"></select></div>
+<div class="comp"><label>Buscar time (em qualquer campeonato)</label><input id="q" type="search" placeholder="ex: Flamengo, Arsenal, Brazil…" autocomplete="off"><div id="qr"></div></div>
 <div class="row">
   <div><label id="lblH">Mandante</label><select id="home"></select></div>
   <div class="x">×</div>
@@ -90,13 +93,11 @@ const compSel=document.getElementById('comp'),hs=document.getElementById('home')
 let slip=[];
 function fillTeams(){
   const C=ALL[compSel.value];
-  const names=Object.keys(C.times).sort((x,y)=>{
-    if(C.type==="intl")return (C.times[y].elo||0)-(C.times[x].elo||0);
-    return x.localeCompare(y);
-  });
+  const names=Object.keys(C.times).sort((x,y)=>x.localeCompare(y,'pt'));
   hs.innerHTML='';as.innerHTML='';
   names.forEach(n=>{hs.add(new Option(n,n));as.add(new Option(n,n));});
   hs.value=names[0]; as.value=names[1];
+  if(C.type==="intl"){const top=Object.keys(C.times).sort((x,y)=>(C.times[y].elo||0)-(C.times[x].elo||0));hs.value=top[0];as.value=top[1];}
   const has=!!C.lg.hc, est=!!C.est;
   document.getElementById('boxC').style.display=has?'':'none';
   document.getElementById('boxK').style.display=has?'':'none';
@@ -142,8 +143,28 @@ function boot(d){
   compSel.innerHTML='';
   Object.keys(ALL).forEach(c=>compSel.add(new Option(c,c)));
   compSel.value=ALL["Copa do Mundo"]?"Copa do Mundo":Object.keys(ALL)[0];
+  IDX=[];Object.keys(ALL).forEach(c=>Object.keys(ALL[c].times).forEach(t=>IDX.push({t,c})));
   fillTeams();renderMarkets();renderSlip();
 }
+let IDX=[];
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const qIn=document.getElementById('q'),qr=document.getElementById('qr');
+qIn.addEventListener('input',()=>{
+  const v=norm(qIn.value.trim());qr.innerHTML='';
+  if(v.length<2)return;
+  IDX.filter(x=>norm(x.t).includes(v)).slice(0,10).forEach(x=>{
+    const el=document.createElement('div');el.className='hit';
+    el.innerHTML='<span>'+x.t+'</span><span class="cc">'+x.c+'</span>';
+    el.onclick=()=>{
+      compSel.value=x.c;fillTeams();
+      hs.value=x.t;
+      if(as.value===x.t){const o=[...as.options].find(o=>o.value!==x.t);if(o)as.value=o.value;}
+      renderMarkets();qIn.value='';qr.innerHTML='';
+      hs.scrollIntoView({behavior:'smooth',block:'center'});
+    };
+    qr.appendChild(el);
+  });
+});
 fetch('data.json',{cache:'no-cache'}).then(r=>{if(!r.ok)throw 0;return r.json();}).then(boot)
   .catch(()=>{document.getElementById('upd').textContent='Sem conexão e sem dados em cache — abra online uma vez.';});
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
