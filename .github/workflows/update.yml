@@ -21,13 +21,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Colher stats API-Football (2022-2024, orcamento diario)
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python scripts/harvest_apif.py || true
       - name: Recalcular dados
         run: python scripts/update_data.py
       - name: Commit se mudou
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json
+          git add data.json apif_store.json
           git diff --cached --quiet || git commit -m "Atualiza dados ($(date -u +%F))"
           git push
       - uses: actions/configure-pages@v5

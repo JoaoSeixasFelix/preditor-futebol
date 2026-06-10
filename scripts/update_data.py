@@ -181,6 +181,40 @@ COPAS = {
 }
 
 # ---------------------------------------------------------------------------
+# Medias medidas via API-Football (apif_store.json, colhido pelo harvester)
+# ---------------------------------------------------------------------------
+APIF_MAP = {
+    "Brasileirao (BRA)": 71, "Libertadores (CONMEBOL)": 13,
+    "Sul-Americana (CONMEBOL)": 11, "Copa do Brasil (BRA)": 73,
+    "Primera (ARG)": 128, "Liga MX (MEX)": 262, "MLS (EUA)": 253,
+    "J1 League (JAP)": 98,
+}
+
+def load_apif_means():
+    import os
+    if not os.path.exists("apif_store.json"): return {}
+    try: store = json.load(open("apif_store.json"))
+    except ValueError: return {}
+    por_liga = {}
+    for v in store.get("stats", {}).values():
+        if "hc" not in v: continue
+        lid = int(v["lg"].split("_")[0])
+        por_liga.setdefault(lid, []).append(v)
+    out = {}
+    for lid, rows in por_liga.items():
+        if len(rows) < 60: continue
+        n = len(rows)
+        hc = sum(r["hc"] for r in rows)/n; ac = sum(r["ac"] for r in rows)/n
+        hcard = sum(r["hy"]+r["hr"] for r in rows)/n
+        acard = sum(r["ay"]+r["ar"] for r in rows)/n
+        tots = [r["hc"]+r["ac"] for r in rows]
+        m = sum(tots)/n; v_ = sum((t-m)**2 for t in tots)/max(n-1,1)
+        r_ = m*m/(v_-m) if v_ > m else 60.0
+        out[lid] = {"hc": round(hc,4), "ac": round(ac,4), "hcard": round(hcard,4),
+                    "acard": round(acard,4), "r": round(r_,2), "n": n}
+    return out
+
+# ---------------------------------------------------------------------------
 # Selecoes (Copa do Mundo)
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -214,12 +248,15 @@ def calibrate(fulls):
             "b_ca": fit_exponent(p_def_ca, 0.5),
             "b_kf": fit_exponent(p_def_kf, 0.3)}
 
-def synthesize(comp, cal):
-    """adiciona escanteios/cartoes estimados a uma competicao so-gols"""
-    g = cal["glob"]
+def synthesize(comp, cal, meas=None):
+    """adiciona escanteios/cartoes estimados a uma competicao so-gols.
+    meas = medias MEDIDAS da propria competicao (API-Football 2022-24);
+    quando presentes, substituem o baseline europeu."""
+    g = meas or cal["glob"]
     comp["lg"].update({"hc": g["hc"], "ac": g["ac"], "hcard": g["hcard"], "acard": g["acard"]})
     comp["r_corners"] = g["r"]
     comp["est"] = True
+    if meas: comp["meas_base"] = True
     for t in comp["times"].values():
         ah, aa = t["atk_h"], t["atk_a"]
         dh, da = t["def_h"], t["def_a"]
@@ -305,6 +342,11 @@ if __name__ == "__main__":
     cal = calibrate(fulls)
     print(f"calibracao ({len(fulls)} ligas): corners~atk^{cal['b_cf']}  "
           f"corners_contra~def^{cal['b_ca']}  cartoes~def^{cal['b_kf']}")
+    MEAS = load_apif_means()
+    def meas_de(nome): return MEAS.get(APIF_MAP.get(nome))
+    if MEAS:
+        for lid, m in MEAS.items():
+            print(f"  baseline medido liga {lid}: corners {m['hc']+m['ac']:.1f} cartoes {m['hcard']+m['acard']:.1f} ({m['n']} jogos)")
     out = {}
     sel = selecoes()
     if sel:
@@ -313,17 +355,19 @@ if __name__ == "__main__":
     for nome, slug in COPAS.items():
         d = copa_espn(slug)
         if d:
-            out[nome] = synthesize(d, cal)
-            print(f"{nome}: {len(d['times'])} times (ESPN, corners/cartoes estimados)")
+            out[nome] = synthesize(d, cal, meas_de(nome))
+            base = "baseline medido" if d.get("meas_base") else "baseline europeu"
+            print(f"{nome}: {len(d['times'])} times (ESPN, {base})")
         else:
             print(f"{nome}: SEM DADOS, pulada")
     for nome, d in main_results.items():
-        out[nome] = d if d["type"] == "club" else synthesize(d, cal)
+        out[nome] = d if d["type"] == "club" else synthesize(d, cal, meas_de(nome))
     for nome, code in EXTRA.items():
         d = liga_extra(code)
         if d:
-            out[nome] = synthesize(d, cal)
-            print(f"{nome}: {len(d['times'])} times (corners/cartoes estimados)")
+            out[nome] = synthesize(d, cal, meas_de(nome))
+            base = "baseline medido" if d.get("meas_base") else "baseline europeu"
+            print(f"{nome}: {len(d['times'])} times ({base})")
         else:
             print(f"{nome}: SEM DADOS, pulada")
     payload = {"generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
