@@ -29,8 +29,16 @@
   .stat{background:var(--card);border-radius:12px;padding:10px;text-align:center;}
   .stat .l{font-size:11px;color:var(--mut);}
   .stat .v{font-size:18px;font-weight:600;margin-top:2px;}
-  .grp{font-size:12px;color:var(--mut);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em;}
-  .mk{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:6px;}
+  .grp{font-size:12px;color:var(--mut);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline;}
+  .grp .cols{font-size:10px;text-transform:none;letter-spacing:0;}
+  .seg{display:flex;height:28px;border-radius:9px;overflow:hidden;margin:2px 0 8px;}
+  .seg div{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;min-width:2px;}
+  .segl{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:10px;}
+  .segl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;}
+  .cd{color:var(--mut);font-size:10px;border:1px solid var(--line);border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:1px;}
+  .mk{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:6px;position:relative;overflow:hidden;}
+  .mk .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(127,119,221,.13);pointer-events:none;}
+  .mk .nm,.mk .rt{position:relative;z-index:1;}
   .mk .nm{font-size:14px;} .mk .rt{display:flex;align-items:center;gap:10px;}
   .mk .pc{font-weight:600;} .mk .fr{font-size:12px;color:var(--mut);}
   .add{background:var(--ac);color:#fff;border:none;width:30px;height:30px;border-radius:8px;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;}
@@ -88,7 +96,7 @@ function predict(comp,h,a){
   const ok=l=>{let t=0;for(let k=0;k<=l;k++)t+=pois(k,ek);return 1-t;};
   return {...r,lh,la,ec,ek,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),k35:ok(3),k45:ok(4),k55:ok(5)};
 }
-const GG=[["Resultado",[["1","{H} vence"],["X","Empate"],["2","{A} vence"],["1X","{H} ou empate"],["12","Sai vencedor"],["X2","{A} ou empate"]]],["Gols",[["o15","Over 1.5"],["o25","Over 2.5"],["o35","Over 3.5"],["btts","Ambos marcam"]]]];
+const GG=[["Vencedor",[["1","{H} vence",""],["X","Empate",""],["2","{A} vence",""]]],["Dupla chance",[["1X","{H} não perde","1X"],["12","Qualquer um vence","12"],["X2","{A} não perde","X2"]]],["Gols",[["o15","Over 1.5",""],["o25","Over 2.5",""],["o35","Over 3.5",""],["btts","Ambos marcam",""]]]];
 const GC=[["Escanteios",[["c85","Over 8.5"],["c95","Over 9.5"],["c105","Over 10.5"],["c115","Over 11.5"]]],["Cartoes",[["k35","Over 3.5"],["k45","Over 4.5"],["k55","Over 5.5"]]]];
 const compSel=document.getElementById('comp'),hs=document.getElementById('home'),as=document.getElementById('away');
 const hsL=document.getElementById('homeList'),asL=document.getElementById('awayList');
@@ -134,10 +142,21 @@ function renderMarkets(){
   document.getElementById('xg').textContent=p.lh.toFixed(1)+'-'+p.la.toFixed(1);
   if(C.lg.hc){document.getElementById('xc').textContent=p.ec.toFixed(1);document.getElementById('xk').textContent=p.ek.toFixed(1);}
   const groups=C.lg.hc?GG.concat(GC):GG;
-  let html='';
-  groups.forEach(([t,mks])=>{const tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;html+='<div class="grp">'+tt+'</div>';mks.forEach(([k,lbl])=>{
-    const nm=lbl.replace('{H}',h).replace('{A}',a),pr=p[k],fr=(1/pr).toFixed(2);
-    html+='<div class="mk"><span class="nm">'+nm+'</span><span class="rt"><span class="pc">'+Math.round(pr*100)+'%</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';});});
+  const segs=[["1",h,"#7f77dd"],["X","Empate","#4a5160"],["2",a,"#2a9d8a"]];
+  let html='<div class="seg">';
+  segs.forEach(s=>{const w=p[s[0]]*100;html+='<div style="width:'+w+'%;background:'+s[2]+'">'+(w>=13?Math.round(w)+'%':'')+'</div>';});
+  html+='</div><div class="segl">';
+  segs.forEach(s=>{html+='<span><i style="background:'+s[2]+'"></i>'+s[1]+' '+Math.round(p[s[0]]*100)+'%</span>';});
+  html+='</div>';
+  let first=true;
+  groups.forEach(([t,mks])=>{
+    const tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;
+    html+='<div class="grp"><span>'+tt+'</span>'+(first?'<span class="cols">probabilidade · odd justa</span>':'')+'</div>';first=false;
+    mks.forEach(([k,lbl,cd])=>{
+      const nm=lbl.replace('{H}',h).replace('{A}',a),pr=p[k],fr=(1/pr).toFixed(2);
+      html+='<div class="mk"><i class="fill" style="width:'+Math.round(pr*100)+'%"></i><span class="nm">'+nm+(cd?'<span class="cd">'+cd+'</span>':'')+'</span><span class="rt"><span class="pc">'+Math.round(pr*100)+'%</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';
+    });
+  });
   box.innerHTML=html;
   box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pr]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pr)});renderSlip();});
 }
