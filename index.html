@@ -200,6 +200,7 @@ function renderMarkets(){
   html+='</div>';
   let first=true;
   groups.forEach(([t,open,mks])=>{
+    open=1;
     let tt=(C.est&&(t.startsWith('Escanteios')||t.startsWith('Cartoes')))?t+' (estimativa)':t;
     if(t==='Cartoes'&&p.ekAdj>0.25)tt+=' · 🔥 rivalidade quente';
     if(t==='Cartoes'&&p.ekAdj<-0.25)tt+=' · confronto morno';
