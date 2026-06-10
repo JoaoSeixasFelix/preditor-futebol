@@ -67,6 +67,10 @@
   .pcell i{font-style:normal;font-size:10px;color:var(--mut);}
   .pcell:active{border-color:var(--ac);}
   .pmrest.closed{display:none;}
+  .reco{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ac);border-radius:12px;padding:12px;margin:4px 0 14px;}
+  .rtitle{font-weight:600;font-size:14px;margin-bottom:6px;}
+  .rtx{font-size:13px;line-height:1.55;}
+  .rnote{font-size:11px;color:var(--mut);margin-top:8px;}
   .more{width:100%;background:none;border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:8px;font-size:13px;margin:2px 0 10px;}
   .hrow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px;font-size:13px;}
   .dot{width:9px;height:9px;border-radius:50%;flex:none;}
@@ -214,6 +218,30 @@ function renderMarkets(){
   html+='</div><div class="segl">';
   segs.forEach(s=>{html+='<span><i style="background:'+s[2]+'"></i>'+s[1]+' '+Math.round(p[s[0]]*100)+'%</span>';});
   html+='</div>';
+  const fav=p["1"]>=p["2"]?h:a, pf=Math.max(p["1"],p["2"]);
+  let l1;
+  if(pf>=0.55)l1='Favoritismo claro de '+fav+' ('+Math.round(pf*100)+'%).';
+  else if(pf>=0.42)l1='Leve favoritismo de '+fav+' ('+Math.round(pf*100)+'%).';
+  else l1='Jogo equilibrado.';
+  const tg=p.lh+p.la;
+  const l2=tg>=3.1?'Tendência de jogo aberto ('+tg.toFixed(1)+' gols esperados).':(tg<=2.2?'Tendência de jogo travado ('+tg.toFixed(1)+' gols esperados).':'Expectativa moderada de gols ('+tg.toFixed(1)+').');
+  const l3=C.lg.hc?('Escanteios na casa de '+Math.round(p.ec)+'; cartões ~'+p.ek.toFixed(1)+(p.ekAdj>0.25?' 🔥 rivalidade':'')+'.'):'';
+  const cen='Cenário mais provável: '+p.top[0][0]+'–'+p.top[0][1]+' ('+Math.round(p.top[0][2]*100)+'%).';
+  const CAND=[['1X',h+' não perde'],['X2',a+' não perde'],['12','Qualquer um vence'],
+    ['dnbH',h+' (empate devolve)'],['dnbA',a+' (empate devolve)'],
+    ['o15','Over 1.5 gols'],['o25','Over 2.5 gols'],['u25','Under 2.5 gols'],['btts','Ambos marcam'],
+    ['th15',h+': 2+ gols'],['ta15',a+': 2+ gols']];
+  if(C.lg.hc)CAND.push(['c85','Over 8.5 escanteios'],['c75','Over 7.5 escanteios'],['cu105','Under 10.5 escanteios'],
+    ['k35','Over 3.5 cartões'],['k25','Over 2.5 cartões'],['ku45','Under 4.5 cartões']);
+  const picks=CAND.map(([k,nm])=>[nm,p[k]]).filter(x=>isFinite(x[1])&&x[1]>=0.58&&x[1]<=0.9).sort((x,y)=>y[1]-x[1]).slice(0,3);
+  html+='<div class="reco"><div class="rtitle">💡 Leitura do jogo</div><div class="rtx">'+l1+' '+l2+' '+l3+' '+cen+'</div>';
+  if(picks.length){
+    html+='<div class="rtx" style="margin-top:8px;color:var(--mut)">Maior confiança do modelo:</div>';
+    picks.forEach(([nm,pr])=>{
+      html+='<div class="mk" style="margin-top:6px"><i class="fill" style="width:'+Math.round(pr*100)+'%"></i><span class="nm">'+nm+'</span><span class="rt"><span class="pc">'+Math.round(pr*100)+'%</span><span class="fr">'+(1/pr).toFixed(2)+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';
+    });
+  }
+  html+='<div class="rnote">Confiança alta ≠ valor: só há vantagem se a odd da casa pagar ACIMA da odd justa mostrada.</div></div>';
   let first=true;
   groups.forEach(([t,open,mks])=>{
     open=1;
