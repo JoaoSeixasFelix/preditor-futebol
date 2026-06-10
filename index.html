@@ -31,6 +31,9 @@
   .stat .v{font-size:18px;font-weight:600;margin-top:2px;}
   .grp{font-size:12px;color:var(--mut);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline;}
   .grp .cols{font-size:10px;text-transform:none;letter-spacing:0;}
+  .grp{cursor:pointer;}
+  .chev{font-size:10px;}
+  .gwrap.closed{display:none;}
   .seg{display:flex;height:28px;border-radius:9px;overflow:hidden;margin:2px 0 8px;}
   .seg div{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;min-width:2px;}
   .segl{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:10px;}
@@ -95,17 +98,56 @@ function goalsMk(M){const G=f=>{let t=0;for(let i=0;i<10;i++)for(let j=0;j<10;j+
 function predict(comp,h,a){
   const C=ALL[comp],H=C.times[h],A=C.times[a];
   const lh=C.lg.hg*H.atk_h*A.def_a, la=C.lg.ag*A.atk_a*H.def_h;
-  const r=goalsMk(matrix(lh,la));
+  const M=matrix(lh,la);
+  const r=goalsMk(M);
+  const G=f=>{let t=0;for(let i=0;i<10;i++)for(let j=0;j<10;j++)if(f(i,j))t+=M[i][j];return t;};
+  r.u25=1-r.o25; r.o45=G((i,j)=>i+j>=5); r.o55=G((i,j)=>i+j>=6);
+  r.th15=G((i,j)=>i>=2); r.th25=G((i,j)=>i>=3); r.ta15=G((i,j)=>j>=2); r.ta25=G((i,j)=>j>=3);
+  r.fg01=G((i,j)=>i+j<=1); r.fg23=G((i,j)=>i+j>=2&&i+j<=3); r.fg46=G((i,j)=>i+j>=4&&i+j<=6); r.fg7=G((i,j)=>i+j>=7);
+  r.wbttsH=G((i,j)=>i>j&&j>=1); r.wbttsA=G((i,j)=>j>i&&i>=1);
+  r.hm15=G((i,j)=>i-j>=2); r.hm25=G((i,j)=>i-j>=3); r.am15=G((i,j)=>j-i>=2); r.am25=G((i,j)=>j-i>=3);
+  r.dnbH=r["1"]/(1-r["X"]); r.dnbA=r["2"]/(1-r["X"]);
+  const sc=[];for(let i=0;i<6;i++)for(let j=0;j<6;j++)sc.push([i,j,M[i][j]]);
+  sc.sort((x,y)=>y[2]-x[2]); r.top=sc.slice(0,8);
+  const MH=matrix(lh*0.45,la*0.45), M2=matrix(lh*0.55,la*0.55);
+  const GH=f=>{let t=0;for(let i=0;i<10;i++)for(let j=0;j<10;j++)if(f(i,j))t+=MH[i][j];return t;};
+  r.ht1=GH((i,j)=>i>j); r.htX=GH((i,j)=>i===j); r.ht2=GH((i,j)=>i<j);
+  r.hto05=GH((i,j)=>i+j>=1); r.hto15=GH((i,j)=>i+j>=2);
+  const hf={'11':0,'X1':0,'21':0,'1X':0,'XX':0,'2X':0,'12':0,'X2':0,'22':0};
+  for(let a1=0;a1<10;a1++)for(let b1=0;b1<10;b1++){const ph=MH[a1][b1];if(ph<1e-7)continue;
+    const hs=a1>b1?'1':(a1<b1?'2':'X');
+    for(let c=0;c<10;c++)for(let d=0;d<10;d++){const t1=a1+c,t2=b1+d;hf[hs+(t1>t2?'1':(t1<t2?'2':'X'))]+=ph*M2[c][d];}}
+  Object.keys(hf).forEach(k=>r['hf'+k]=hf[k]);
   if(!C.lg.hc) return {...r,lh,la};
   const ec=C.lg.hc*H.cf_h*A.ca_a+C.lg.ac*A.cf_a*H.ca_h;
   let ek=C.lg.hcard*H.kf_h+C.lg.acard*A.kf_a, ekAdj=0;
   if(C.h2h){const pk=C.h2h[[h,a].slice().sort().join('|')];if(pk){ekAdj=0.2*pk[1]*pk[0]/(pk[0]+3);ek=Math.max(ek+ekAdj,1);}}
   const oc=l=>{let t=0;for(let k=0;k<=l;k++)t+=nb(k,C.r_corners,ec);return 1-t;};
   const ok=l=>{let t=0;for(let k=0;k<=l;k++)t+=pois(k,ek);return 1-t;};
-  return {...r,lh,la,ec,ek,ekAdj,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),k35:ok(3),k45:ok(4),k55:ok(5)};
+  return {...r,lh,la,ec,ek,ekAdj,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),
+    c75:oc(7),c125:oc(12),cu85:1-oc(8),cu105:1-oc(10),
+    k35:ok(3),k45:ok(4),k55:ok(5),k25:ok(2),k65:ok(6),ku35:1-ok(3),ku45:1-ok(4)};
 }
-const GG=[["Vencedor",[["1","{H} vence",""],["X","Empate",""],["2","{A} vence",""]]],["Dupla chance",[["1X","{H} não perde","1X"],["12","Qualquer um vence","12"],["X2","{A} não perde","X2"]]],["Gols",[["o15","Over 1.5",""],["o25","Over 2.5",""],["o35","Over 3.5",""],["btts","Ambos marcam",""]]]];
-const GC=[["Escanteios",[["c85","Over 8.5"],["c95","Over 9.5"],["c105","Over 10.5"],["c115","Over 11.5"]]],["Cartoes",[["k35","Over 3.5"],["k45","Over 4.5"],["k55","Over 5.5"]]]];
+const GG=[
+ ["Vencedor",1,[["1","{H} vence",""],["X","Empate",""],["2","{A} vence",""]]],
+ ["Dupla chance",1,[["1X","{H} não perde","1X"],["12","Qualquer um vence","12"],["X2","{A} não perde","X2"]]],
+ ["Empate anula aposta",0,[["dnbH","{H} (empate devolve)",""],["dnbA","{A} (empate devolve)",""]]],
+ ["Gols",1,[["o15","Over 1.5",""],["o25","Over 2.5",""],["o35","Over 3.5",""],["btts","Ambos marcam",""]]],
+ ["Gols - alternativas",0,[["u25","Under 2.5",""],["o45","Over 4.5",""],["o55","Over 5.5",""]]],
+ ["Gols por time",0,[["th15","{H}: 2+ gols",""],["th25","{H}: 3+ gols",""],["ta15","{A}: 2+ gols",""],["ta25","{A}: 3+ gols",""]]],
+ ["Faixa de gols",0,[["fg01","0–1 gols",""],["fg23","2–3 gols",""],["fg46","4–6 gols",""],["fg7","7+ gols",""]]],
+ ["Vencedor & ambos marcam",0,[["wbttsH","{H} vence e ambos marcam",""],["wbttsA","{A} vence e ambos marcam",""]]],
+ ["Handicap",0,[["hm15","{H} vence por 2+","−1.5"],["hm25","{H} vence por 3+","−2.5"],["am15","{A} vence por 2+","−1.5"],["am25","{A} vence por 3+","−2.5"]]],
+ ["Placar exato",0,"SCORES"],
+ ["1º tempo",0,[["ht1","{H} vence o 1º tempo",""],["htX","1º tempo empatado",""],["ht2","{A} vence o 1º tempo",""],["hto05","Over 0.5 (1º tempo)",""],["hto15","Over 1.5 (1º tempo)",""]]],
+ ["Intervalo/Final",0,[["hf11","{H} / {H}",""],["hfX1","Empate / {H}",""],["hf21","{A} / {H}",""],["hf1X","{H} / Empate",""],["hfXX","Empate / Empate",""],["hf2X","{A} / Empate",""],["hf12","{H} / {A}",""],["hfX2","Empate / {A}",""],["hf22","{A} / {A}",""]]]
+];
+const GC=[
+ ["Escanteios",1,[["c85","Over 8.5",""],["c95","Over 9.5",""],["c105","Over 10.5",""],["c115","Over 11.5",""]]],
+ ["Escanteios - alternativas",0,[["c75","Over 7.5",""],["c125","Over 12.5",""],["cu85","Under 8.5",""],["cu105","Under 10.5",""]]],
+ ["Cartoes",1,[["k35","Over 3.5",""],["k45","Over 4.5",""],["k55","Over 5.5",""]]],
+ ["Cartoes - alternativas",0,[["k25","Over 2.5",""],["k65","Over 6.5",""],["ku35","Under 3.5",""],["ku45","Under 4.5",""]]]
+];
 const compSel=document.getElementById('comp'),hs=document.getElementById('home'),as=document.getElementById('away');
 const hsL=document.getElementById('homeList'),asL=document.getElementById('awayList');
 let slip=[],NAMES=[],selH='',selA='';
@@ -157,17 +199,31 @@ function renderMarkets(){
   segs.forEach(s=>{html+='<span><i style="background:'+s[2]+'"></i>'+s[1]+' '+Math.round(p[s[0]]*100)+'%</span>';});
   html+='</div>';
   let first=true;
-  groups.forEach(([t,mks])=>{
-    let tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;
+  groups.forEach(([t,open,mks])=>{
+    let tt=(C.est&&(t.startsWith('Escanteios')||t.startsWith('Cartoes')))?t+' (estimativa)':t;
     if(t==='Cartoes'&&p.ekAdj>0.25)tt+=' · 🔥 rivalidade quente';
     if(t==='Cartoes'&&p.ekAdj<-0.25)tt+=' · confronto morno';
-    html+='<div class="grp"><span>'+tt+'</span>'+(first?'<span class="cols">probabilidade · odd justa</span>':'')+'</div>';first=false;
-    mks.forEach(([k,lbl,cd])=>{
-      const nm=lbl.replace('{H}',h).replace('{A}',a),pr=p[k],fr=(1/pr).toFixed(2);
-      html+='<div class="mk"><i class="fill" style="width:'+Math.round(pr*100)+'%"></i><span class="nm">'+nm+(cd?'<span class="cd">'+cd+'</span>':'')+'</span><span class="rt"><span class="pc">'+Math.round(pr*100)+'%</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';
+    html+='<div class="grp"><span>'+tt+' <span class="chev">'+(open?'▾':'▸')+'</span></span>'+(first?'<span class="cols">probabilidade · odd justa</span>':'')+'</div>';first=false;
+    let rows='';
+    const items=(mks==='SCORES')?p.top.map(s=>['_s','Placar '+s[0]+'–'+s[1],'',s[2]]):mks;
+    items.forEach(it=>{
+      const nm=(it[1]).replace('{H}',h).replace('{A}',a), cd=it[2];
+      const pr=(it[0]==='_s')?it[3]:p[it[0]];
+      if(pr===undefined||!isFinite(pr))return;
+      const pct=pr*100, pcs=pct>=1?Math.round(pct)+'%':'<1%';
+      const fr=pr>0?(1/pr).toFixed(2):'-';
+      rows+='<div class="mk"><i class="fill" style="width:'+Math.round(pct)+'%"></i><span class="nm">'+nm+(cd?'<span class="cd">'+cd+'</span>':'')+'</span><span class="rt"><span class="pc">'+pcs+'</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';
     });
+    html+='<div class="gwrap'+(open?'':' closed')+'">'+rows+'</div>';
   });
   box.innerHTML=html;
+  box.querySelectorAll('.grp').forEach(g=>{g.onclick=e=>{
+    const w=g.nextElementSibling;
+    if(!w||!w.classList.contains('gwrap'))return;
+    w.classList.toggle('closed');
+    const c=g.querySelector('.chev');
+    if(c)c.textContent=w.classList.contains('closed')?'▸':'▾';
+  };});
   box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pr]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pr)});renderSlip();});
   renderH2H();
 }
