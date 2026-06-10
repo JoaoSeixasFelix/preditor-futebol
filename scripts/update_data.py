@@ -23,6 +23,17 @@ def fetch(url, timeout=60):
         print(f"  aviso: falha em {url}: {e}")
         return None
 
+def pdate(s):
+    for fmt in ("%d/%m/%Y", "%d/%m/%y"):
+        try: return datetime.datetime.strptime(s, fmt).date().isoformat()
+        except ValueError: pass
+    return None
+
+def slugify(s):
+    import unicodedata, re as _re
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return _re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+
 def season_codes(n=4):
     """Codigos mmz4281 das n temporadas mais recentes (Europa: ago-mai)."""
     today = datetime.date.today()
@@ -53,7 +64,8 @@ def liga_main(code):
         for r in csv.DictReader(io.StringIO(txt)):
             try:
                 base = {"h": r["HomeTeam"], "a": r["AwayTeam"], "w": w,
-                        "hg": int(r["FTHG"]), "ag": int(r["FTAG"])}
+                        "hg": int(r["FTHG"]), "ag": int(r["FTAG"]),
+                        "dt": pdate(r.get("Date", ""))}
             except (ValueError, KeyError):
                 continue
             gols.append(base)
@@ -62,11 +74,10 @@ def liga_main(code):
                              "hk": int(r["HY"])+int(r["HR"]), "ak": int(r["AY"])+int(r["AR"])})
             except (ValueError, KeyError):
                 pass
-    if len(full) >= 150:
-        return _build_full(full)
-    if len(gols) >= 50:
-        return _build_gols(gols)
-    return None
+    d = _build_full(full) if len(full) >= 150 else (_build_gols(gols) if len(gols) >= 50 else None)
+    if d:
+        d["_matches"] = [[j["dt"], j["h"], j["a"], j["hg"], j["ag"]] for j in gols if j.get("dt")]
+    return d
 
 def _acc_gols(jogos):
     acc = defaultdict(lambda: defaultdict(float))
@@ -145,10 +156,14 @@ def liga_extra(code):
         if y not in anos: continue
         try:
             jogos.append({"h": r["Home"], "a": r["Away"], "w": 0.5**(anos[0]-y),
-                          "hg": int(r["HG"]), "ag": int(r["AG"])})
+                          "hg": int(r["HG"]), "ag": int(r["AG"]),
+                          "dt": pdate(r.get("Date", ""))})
         except (ValueError, KeyError):
             continue
-    return _build_gols(jogos) if len(jogos) >= 50 else None
+    d = _build_gols(jogos) if len(jogos) >= 50 else None
+    if d:
+        d["_matches"] = [[j["dt"], j["h"], j["a"], j["hg"], j["ag"]] for j in jogos if j.get("dt")]
+    return d
 
 # ---------------------------------------------------------------------------
 # Copas via API publica da ESPN (sem chave). Resultados dos ultimos ~30 meses,
@@ -179,7 +194,7 @@ def copa_espn(slug):
                 w = 0.5 ** (((hoje - d).days) / 548.0)
                 jogos.append({"h": lados["home"]["team"]["displayName"],
                               "a": lados["away"]["team"]["displayName"],
-                              "w": w, "hg": hg, "ag": ag})
+                              "w": w, "hg": hg, "ag": ag, "dt": ev["date"][:10]})
             except (KeyError, ValueError, IndexError):
                 continue
     # dedup (janelas podem se sobrepor em eventos de borda)
@@ -187,7 +202,10 @@ def copa_espn(slug):
     for j in jogos:
         k = (j["h"], j["a"], j["hg"], j["ag"], round(j["w"], 4))
         if k not in vistos: vistos.add(k); unicos.append(j)
-    return _build_gols(unicos) if len(unicos) >= 50 else None
+    d = _build_gols(unicos) if len(unicos) >= 50 else None
+    if d:
+        d["_matches"] = [[j["dt"], j["h"], j["a"], j["hg"], j["ag"]] for j in unicos]
+    return d
 
 COPAS = {
     "Libertadores (CONMEBOL)": "conmebol.libertadores",
@@ -318,7 +336,10 @@ def selecoes():
         # formato unico (clube): jogo neutro -> mesma forca casa/fora e hg=ag
         times[t] = {"elo": round(elo.get(t, 1500)),
                     "atk_h": atk, "atk_a": atk, "def_h": dfc, "def_a": dfc}
-    return {"type": "intl", "lg": {"hg": round(MG, 4), "ag": round(MG, 4)}, "times": times}
+    lim4 = HOJE - datetime.timedelta(days=4*365)
+    ms = [[j["d"].isoformat(), j["c"], j["f"], j["gc"], j["gf"]] for j in rec if j["d"] >= lim4]
+    return {"type": "intl", "lg": {"hg": round(MG, 4), "ag": round(MG, 4)},
+            "times": times, "_matches": ms}
 
 # ---------------------------------------------------------------------------
 # Catalogo de competicoes (paridade: divisoes inferiores onde existem)
@@ -385,6 +406,16 @@ if __name__ == "__main__":
             print(f"{nome}: {len(d['times'])} times ({base})")
         else:
             print(f"{nome}: SEM DADOS, pulada")
+    # exporta confrontos por competicao (arquivos pequenos, carregados sob demanda)
+    import os
+    os.makedirs("h2h", exist_ok=True)
+    for nome, comp in out.items():
+        ms = comp.pop("_matches", None)
+        if not ms: continue
+        ms.sort(key=lambda m: m[0] or "", reverse=True)
+        comp["slug"] = slugify(nome)
+        with open(f"h2h/{comp['slug']}.json", "w", encoding="utf-8") as f:
+            json.dump(ms[:6000], f, ensure_ascii=False)
     payload = {"generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                "competitions": out}
     with open("data.json", "w", encoding="utf-8") as f:

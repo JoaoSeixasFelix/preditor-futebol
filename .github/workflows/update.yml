@@ -31,7 +31,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json apif_store.json
+          git add data.json apif_store.json h2h/
           git diff --cached --quiet || git commit -m "Atualiza dados ($(date -u +%F))"
           git push
       - uses: actions/configure-pages@v5

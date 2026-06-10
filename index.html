@@ -50,6 +50,12 @@
   .tot{border-top:1px solid var(--line);margin-top:8px;padding-top:10px;}
   .tot .ln{display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px;}
   .tot .ln .mut{color:var(--mut);} .ev{margin-top:8px;font-size:13px;font-weight:600;}
+  .hrow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px;font-size:13px;}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .dot.vit{background:var(--ok);} .dot.emp{background:var(--mut);} .dot.der{background:var(--bad);}
+  .hd{color:var(--mut);font-size:12px;width:62px;flex:none;}
+  .hm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hm b{font-weight:600;}
   .foot{font-size:11px;color:var(--mut);margin-top:16px;line-height:1.6;}
   .empty{color:var(--mut);font-size:13px;}
 </style>
@@ -68,6 +74,7 @@
   <div class="stat" id="boxC"><div class="l" id="lblC">Escanteios</div><div class="v" id="xc">-</div></div>
   <div class="stat" id="boxK"><div class="l" id="lblK">Cartoes</div><div class="v" id="xk">-</div></div>
 </div>
+<div id="h2h"></div>
 <div id="markets"></div>
 <div class="slip">
   <h2><span>🎟️ Multipla</span><button class="clr" id="clear">limpar</button></h2>
@@ -162,6 +169,31 @@ function renderMarkets(){
   });
   box.innerHTML=html;
   box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pr]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pr)});renderSlip();});
+  renderH2H();
+}
+const H2HC={};
+function renderH2H(){
+  const comp=compSel.value,C=ALL[comp],box=document.getElementById('h2h');
+  box.innerHTML='';
+  const h=selH,a=selA;
+  if(!C||!C.slug||!C.times[h]||!C.times[a]||h===a)return;
+  const paint=list=>{
+    if(compSel.value!==comp||selH!==h||selA!==a)return;
+    const ms=list.filter(m=>(m[1]===h&&m[2]===a)||(m[1]===a&&m[2]===h)).slice(0,6);
+    if(!ms.length){box.innerHTML='<div class="grp"><span>Ultimos confrontos</span></div><div class="empty" style="margin-bottom:6px">Sem confronto direto no periodo dos dados.</div>';return;}
+    let v=0,e=0,d=0;
+    const rows=ms.map(m=>{
+      const[dt,mh,ma,g1,g2]=m;
+      const win=g1>g2?mh:(g2>g1?ma:null);
+      let cls;
+      if(!win){e++;cls='emp';}else if(win===h){v++;cls='vit';}else{d++;cls='der';}
+      const dd=dt?dt.slice(8,10)+'/'+dt.slice(5,7)+'/'+dt.slice(2,4):'';
+      return '<div class="hrow"><i class="dot '+cls+'"></i><span class="hd">'+dd+'</span><span class="hm">'+mh+' <b>'+g1+'–'+g2+'</b> '+ma+'</span></div>';
+    }).join('');
+    box.innerHTML='<div class="grp"><span>Ultimos confrontos</span><span class="cols">'+h+': '+v+'V '+e+'E '+d+'D</span></div>'+rows;
+  };
+  if(H2HC[C.slug]){paint(H2HC[C.slug]);return;}
+  fetch('h2h/'+C.slug+'.json',{cache:'no-cache'}).then(r=>r.ok?r.json():[]).then(l=>{H2HC[C.slug]=l;paint(l);}).catch(()=>{});
 }
 function renderSlip(){
   const box=document.getElementById('slip'),tot=document.getElementById('totals');
