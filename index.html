@@ -243,51 +243,49 @@ function renderPlayers(){
     if(compSel.value!==comp||selH!==h||selA!==a)return;
     const th=data.teams[h]||[], ta=data.teams[a]||[];
     if(!th.length&&!ta.length)return;
-    let opts='';
-    [[h,th],[a,ta]].forEach(([t,ps])=>{
-      if(!ps.length)return;
-      opts+='<optgroup label="'+t+'">';
-      ps.slice().sort((x,y)=>y.st-x.st).forEach((pl,i0)=>{
-        opts+='<option value="'+t+'|'+pl.n+'">'+pl.n+' · '+pl.pos+' ('+pl.st+'j)</option>';
+    const p=predict(comp,h,a);
+    const cardM=C.lg.hcard!==undefined?p.ek/(C.lg.hcard+C.lg.acard):1, k=5;
+    const todos=[];
+    [[h,th,p.lh],[a,ta,p.la]].forEach(([time,ps,lado])=>{
+      const attM=lado/C.lg.hg;
+      ps.forEach(pl=>{
+        const pr=PRIOR[pl.pos]||PRIOR.M;
+        const lg_=pRate(pl.g,pl.st,pr.g,k)*attM;
+        const lsh=pRate(pl.sh,pl.st,pr.sh,k)*attM;
+        const lsog=pRate(pl.sog,pl.st,pr.sog,k)*attM;
+        const lfc=pRate(pl.fc,pl.st,pr.fc,k);
+        const lcd=pRate(pl.yc+pl.rc,pl.st,pr.cd,k)*cardM;
+        todos.push({time,n:pl.n,pos:pl.pos,
+          marca:1-Math.exp(-lg_), sog1:1-Math.exp(-lsog),
+          fin2:1-Math.exp(-lsh)*(1+lsh),
+          cart:Math.min(1-Math.exp(-lcd),.75),
+          falt2:1-Math.exp(-lfc)*(1+lfc)});
       });
-      opts+='</optgroup>';
     });
-    box.innerHTML='<div class="grp"><span>Jogador · convocados da Copa <span style="text-transform:none">(estimativa, se jogar)</span></span></div>'+
-      '<select id="plSel" style="margin-bottom:8px">'+opts+'</select><div id="plMk"></div>';
-    const sel=document.getElementById('plSel');
-    const show=()=>{
-      const[time,nome]=sel.value.split('|');
-      const ps=(data.teams[time]||[]).find(x=>x.n===nome);
-      if(!ps)return;
-      const p=predict(comp,h,a);
-      const lado=(time===h)?p.lh:p.la;
-      const attM=lado/C.lg.hg, cardM=C.lg.hcard!==undefined?p.ek/(C.lg.hcard+C.lg.acard):1;
-      const pr=PRIOR[ps.pos]||PRIOR.M, k=5;
-      const lg_=pRate(ps.g,ps.st,pr.g,k)*attM;
-      const lsh=pRate(ps.sh,ps.st,pr.sh,k)*attM;
-      const lsog=pRate(ps.sog,ps.st,pr.sog,k)*attM;
-      const lfc=pRate(ps.fc,ps.st,pr.fc,k);
-      const lcd=pRate(ps.yc+ps.rc,ps.st,pr.cd,k)*cardM;
-      const mks=[
-        ['Marca a qualquer momento',1-Math.exp(-lg_)],
-        ['1+ chute no gol',1-Math.exp(-lsog)],
-        ['2+ finalizacoes',1-Math.exp(-lsh)*(1+lsh)],
-        ['Toma cartao',Math.min(1-Math.exp(-lcd),.75)],
-        ['2+ faltas cometidas',1-Math.exp(-lfc)*(1+lfc)]
-      ];
-      let html='';
-      mks.forEach(([nm,prob])=>{
+    const MKS=[['marca','Jogador marca a qualquer momento'],['sog1','Jogador: 1+ chute no gol'],
+      ['fin2','Jogador: 2+ finalizacoes'],['cart','Jogador toma cartao'],['falt2','Jogador: 2+ faltas cometidas']];
+    let html='<div class="grp"><span>Jogadores · so convocados <span style="text-transform:none">(estimativa, se jogar)</span></span></div>';
+    MKS.forEach(([key,titulo])=>{
+      html+='<div class="grp"><span>'+titulo+' <span class="chev">▾</span></span></div><div class="gwrap">';
+      todos.slice().sort((x,y)=>y[key]-x[key]).forEach(j=>{
+        const prob=j[key];
         if(!isFinite(prob)||prob<=0)return;
         const pct=prob*100,pcs=pct>=1?Math.round(pct)+'%':'<1%';
-        const fr=(1/prob).toFixed(2);
-        const lbl=nome+': '+nm;
-        html+='<div class="mk"><i class="fill" style="width:'+Math.round(pct)+'%"></i><span class="nm">'+nm+'</span><span class="rt"><span class="pc">'+pcs+'</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+lbl+'|'+prob+'">+</button></span></div>';
+        const fr=prob>0?(1/prob).toFixed(2):'-';
+        const lbl=j.n+' ('+j.time+'): '+titulo.replace('Jogador: ','').replace('Jogador ','');
+        html+='<div class="mk"><i class="fill" style="width:'+Math.round(pct)+'%"></i><span class="nm">'+j.n+' <span class="cd">'+j.time+' · '+j.pos+'</span></span><span class="rt"><span class="pc">'+pcs+'</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+lbl+'|'+prob+'">+</button></span></div>';
       });
-      const mk=document.getElementById('plMk');
-      mk.innerHTML=html;
-      mk.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pp]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pp)});renderSlip();});
-    };
-    sel.onchange=show;show();
+      html+='</div>';
+    });
+    box.innerHTML=html;
+    box.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const[t,pp]=b.dataset.l.split('|');slip.push({t,p:parseFloat(pp)});renderSlip();});
+    box.querySelectorAll('.grp').forEach(g=>{g.onclick=()=>{
+      const w=g.nextElementSibling;
+      if(!w||!w.classList.contains('gwrap'))return;
+      w.classList.toggle('closed');
+      const c=g.querySelector('.chev');
+      if(c)c.textContent=w.classList.contains('closed')?'▸':'▾';
+    };});
   };
   if(PLC[C.slug]){paint(PLC[C.slug]);return;}
   fetch('players/'+C.slug+'.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(d=>{if(d){PLC[C.slug]=d;paint(d);}}).catch(()=>{});
