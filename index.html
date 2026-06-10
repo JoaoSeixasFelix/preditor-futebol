@@ -53,8 +53,8 @@
 </div>
 <div class="stats">
   <div class="stat"><div class="l">Gols esp.</div><div class="v" id="xg">-</div></div>
-  <div class="stat" id="boxC"><div class="l">Escanteios</div><div class="v" id="xc">-</div></div>
-  <div class="stat" id="boxK"><div class="l">Cartoes</div><div class="v" id="xk">-</div></div>
+  <div class="stat" id="boxC"><div class="l" id="lblC">Escanteios</div><div class="v" id="xc">-</div></div>
+  <div class="stat" id="boxK"><div class="l" id="lblK">Cartoes</div><div class="v" id="xk">-</div></div>
 </div>
 <div id="markets"></div>
 <div class="slip">
@@ -62,7 +62,7 @@
   <div id="slip"><div class="empty">Toque no + de qualquer mercado pra montar. Pode trocar jogo/campeonato e somar mais.</div></div>
   <div id="totals"></div>
 </div>
-<p class="foot">Selecoes: ~49 mil jogos reais (1872-2026). Clubes: football-data.co.uk. Multipla assume independencia. Modelo estatistico, nao garantia. Aposte com responsabilidade. +18.</p>
+<p class="foot">Selecoes: ~49 mil jogos reais (1872-2026). Clubes: football-data.co.uk. Em ligas marcadas "(estimativa)", a fonte nao publica escanteios/cartoes: os valores sao estimados pelo modelo a partir da forca de ataque/defesa, calibrada em ~20 mil jogos das ligas completas. Multipla assume independencia. Modelo estatistico, nao garantia. Aposte com responsabilidade. +18.</p>
 <script>
 let ALL={};
 const fact=n=>{let r=1;for(let i=2;i<=n;i++)r*=i;return r;};
@@ -75,13 +75,9 @@ function goalsMk(M){const G=f=>{let t=0;for(let i=0;i<10;i++)for(let j=0;j<10;j+
   return {"1":G((i,j)=>i>j),"X":G((i,j)=>i===j),"2":G((i,j)=>i<j),"1X":G((i,j)=>i>=j),"12":G((i,j)=>i!==j),"X2":G((i,j)=>i<=j),o15:G((i,j)=>i+j>=2),o25:G((i,j)=>i+j>=3),o35:G((i,j)=>i+j>=4),btts:G((i,j)=>i>=1&&j>=1)};}
 function predict(comp,h,a){
   const C=ALL[comp],H=C.times[h],A=C.times[a];
-  if(C.type==="intl"){
-    const MG=C.media_gol, lh=MG*H.atk*A.def, la=MG*A.atk*H.def;
-    return {...goalsMk(matrix(lh,la)),lh,la};
-  }
   const lh=C.lg.hg*H.atk_h*A.def_a, la=C.lg.ag*A.atk_a*H.def_h;
   const r=goalsMk(matrix(lh,la));
-  if(C.type==="club_g") return {...r,lh,la};
+  if(!C.lg.hc) return {...r,lh,la};
   const ec=C.lg.hc*H.cf_h*A.ca_a+C.lg.ac*A.cf_a*H.ca_h;
   const ek=C.lg.hcard*H.kf_h+C.lg.acard*A.kf_a;
   const oc=l=>{let t=0;for(let k=0;k<=l;k++)t+=nb(k,C.r_corners,ec);return 1-t;};
@@ -101,9 +97,11 @@ function fillTeams(){
   hs.innerHTML='';as.innerHTML='';
   names.forEach(n=>{hs.add(new Option(n,n));as.add(new Option(n,n));});
   hs.value=names[0]; as.value=names[1];
-  const isClub=C.type==="club";
-  document.getElementById('boxC').style.display=isClub?'':'none';
-  document.getElementById('boxK').style.display=isClub?'':'none';
+  const has=!!C.lg.hc, est=!!C.est;
+  document.getElementById('boxC').style.display=has?'':'none';
+  document.getElementById('boxK').style.display=has?'':'none';
+  document.getElementById('lblC').textContent=est?'Escanteios (est.)':'Escanteios';
+  document.getElementById('lblK').textContent=est?'Cartoes (est.)':'Cartoes';
   document.getElementById('lblH').textContent=C.type==="intl"?'Selecao 1':'Mandante';
   document.getElementById('lblA').textContent=C.type==="intl"?'Selecao 2':'Visitante';
 }
@@ -112,10 +110,10 @@ function renderMarkets(){
   if(h===a){box.innerHTML='<p class="empty">Escolha times diferentes.</p>';return;}
   const p=predict(compSel.value,h,a);
   document.getElementById('xg').textContent=p.lh.toFixed(1)+'-'+p.la.toFixed(1);
-  if(C.type==="club"){document.getElementById('xc').textContent=p.ec.toFixed(1);document.getElementById('xk').textContent=p.ek.toFixed(1);}
-  const groups=C.type==="club"?GG.concat(GC):GG;
+  if(C.lg.hc){document.getElementById('xc').textContent=p.ec.toFixed(1);document.getElementById('xk').textContent=p.ek.toFixed(1);}
+  const groups=C.lg.hc?GG.concat(GC):GG;
   let html='';
-  groups.forEach(([t,mks])=>{html+='<div class="grp">'+t+'</div>';mks.forEach(([k,lbl])=>{
+  groups.forEach(([t,mks])=>{const tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;html+='<div class="grp">'+tt+'</div>';mks.forEach(([k,lbl])=>{
     const nm=lbl.replace('{H}',h).replace('{A}',a),pr=p[k],fr=(1/pr).toFixed(2);
     html+='<div class="mk"><span class="nm">'+nm+'</span><span class="rt"><span class="pc">'+Math.round(pr*100)+'%</span><span class="fr">'+fr+'</span><button class="add" data-l="'+h+' x '+a+' · '+nm+'|'+pr+'">+</button></span></div>';});});
   box.innerHTML=html;

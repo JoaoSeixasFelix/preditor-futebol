@@ -138,6 +138,51 @@ def liga_extra(code):
 # ---------------------------------------------------------------------------
 # Selecoes (Copa do Mundo)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Calibracao cruzada: nas ligas completas, mede como escanteios/cartoes
+# se relacionam com forca de ataque/defesa. Usa isso p/ ESTIMAR esses
+# mercados nas ligas que so publicam gols (marcadas com est=true).
+# ---------------------------------------------------------------------------
+def fit_exponent(pairs, default):
+    """regressao log-log pela origem: y = x^b"""
+    num = den = 0.0
+    for x, y in pairs:
+        if x <= 0 or y <= 0: continue
+        lx, ly = math.log(x), math.log(y)
+        num += lx*ly; den += lx*lx
+    return round(num/den, 3) if den > 0 else default
+
+def calibrate(fulls):
+    p_atk_cf, p_def_ca, p_def_kf = [], [], []
+    lgs, rs = [], []
+    for d in fulls:
+        lgs.append(d["lg"]); rs.append(d["r_corners"])
+        for t in d["times"].values():
+            p_atk_cf += [(t["atk_h"], t["cf_h"]), (t["atk_a"], t["cf_a"])]
+            p_def_ca += [(t["def_h"], t["ca_h"]), (t["def_a"], t["ca_a"])]
+            p_def_kf += [(t["def_h"], t["kf_h"]), (t["def_a"], t["kf_a"])]
+    n = len(lgs) or 1
+    glob = {k: round(sum(l[k] for l in lgs)/n, 4) for k in ["hc","ac","hcard","acard"]}
+    glob["r"] = round(sum(rs)/n, 2)
+    return {"glob": glob,
+            "b_cf": fit_exponent(p_atk_cf, 0.7),
+            "b_ca": fit_exponent(p_def_ca, 0.5),
+            "b_kf": fit_exponent(p_def_kf, 0.3)}
+
+def synthesize(comp, cal):
+    """adiciona escanteios/cartoes estimados a uma competicao so-gols"""
+    g = cal["glob"]
+    comp["lg"].update({"hc": g["hc"], "ac": g["ac"], "hcard": g["hcard"], "acard": g["acard"]})
+    comp["r_corners"] = g["r"]
+    comp["est"] = True
+    for t in comp["times"].values():
+        ah, aa = t["atk_h"], t["atk_a"]
+        dh, da = t["def_h"], t["def_a"]
+        t["cf_h"] = round(ah**cal["b_cf"], 3); t["cf_a"] = round(aa**cal["b_cf"], 3)
+        t["ca_h"] = round(dh**cal["b_ca"], 3); t["ca_a"] = round(da**cal["b_ca"], 3)
+        t["kf_h"] = round(dh**cal["b_kf"], 3); t["kf_a"] = round(da**cal["b_kf"], 3)
+    return comp
+
 def selecoes():
     txt = fetch("https://raw.githubusercontent.com/martj42/international_results/master/results.csv", timeout=120)
     if not txt: return None
@@ -171,10 +216,12 @@ def selecoes():
     for t in pe:
         if pe[t] < 4: continue
         n = pe[t]; k = 6.0
+        atk = round(((mk[t]/n/MG)*n+k)/(n+k), 3)
+        dfc = round(((sf[t]/n/MG)*n+k)/(n+k), 3)
+        # formato unico (clube): jogo neutro -> mesma forca casa/fora e hg=ag
         times[t] = {"elo": round(elo.get(t, 1500)),
-                    "atk": round(((mk[t]/n/MG)*n+k)/(n+k), 3),
-                    "def": round(((sf[t]/n/MG)*n+k)/(n+k), 3)}
-    return {"type": "intl", "media_gol": round(MG, 4), "times": times}
+                    "atk_h": atk, "atk_a": atk, "def_h": dfc, "def_a": dfc}
+    return {"type": "intl", "lg": {"hg": round(MG, 4), "ag": round(MG, 4)}, "times": times}
 
 # ---------------------------------------------------------------------------
 # Catalogo de competicoes (paridade: divisoes inferiores onde existem)
@@ -201,20 +248,32 @@ EXTRA = {
 }
 
 if __name__ == "__main__":
-    out = {}
-    sel = selecoes()
-    if sel: out["Copa do Mundo"] = sel; print(f"Copa do Mundo: {len(sel['times'])} selecoes")
+    main_results, fulls = {}, []
     for nome, code in MAIN.items():
         d = liga_main(code)
         if d:
-            out[nome] = d
-            print(f"{nome}: {len(d['times'])} times ({'completo' if d['type']=='club' else 'gols'})")
+            main_results[nome] = d
+            if d["type"] == "club": fulls.append(d)
+            print(f"{nome}: {len(d['times'])} times ({'completo' if d['type']=='club' else 'gols->estimado'})")
         else:
             print(f"{nome}: SEM DADOS, pulada")
+    cal = calibrate(fulls)
+    print(f"calibracao ({len(fulls)} ligas): corners~atk^{cal['b_cf']}  "
+          f"corners_contra~def^{cal['b_ca']}  cartoes~def^{cal['b_kf']}")
+    out = {}
+    sel = selecoes()
+    if sel:
+        out["Copa do Mundo"] = synthesize(sel, cal)
+        print(f"Copa do Mundo: {len(sel['times'])} selecoes (corners/cartoes estimados)")
+    for nome, d in main_results.items():
+        out[nome] = d if d["type"] == "club" else synthesize(d, cal)
     for nome, code in EXTRA.items():
         d = liga_extra(code)
-        if d: out[nome] = d; print(f"{nome}: {len(d['times'])} times (gols)")
-        else: print(f"{nome}: SEM DADOS, pulada")
+        if d:
+            out[nome] = synthesize(d, cal)
+            print(f"{nome}: {len(d['times'])} times (corners/cartoes estimados)")
+        else:
+            print(f"{nome}: SEM DADOS, pulada")
     payload = {"generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                "competitions": out}
     with open("data.json", "w", encoding="utf-8") as f:
