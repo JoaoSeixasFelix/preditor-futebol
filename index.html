@@ -79,7 +79,7 @@
 let ALL={};
 const fact=n=>{let r=1;for(let i=2;i<=n;i++)r*=i;return r;};
 const pois=(k,l)=>Math.exp(-l)*Math.pow(l,k)/fact(k);
-function dc(x,y,lh,la,rho=-0.13){if(x===0&&y===0)return 1-lh*la*rho;if(x===0&&y===1)return 1+lh*rho;if(x===1&&y===0)return 1+la*rho;if(x===1&&y===1)return 1-rho;return 1;}
+function dc(x,y,lh,la,rho=-0.05){if(x===0&&y===0)return 1-lh*la*rho;if(x===0&&y===1)return 1+lh*rho;if(x===1&&y===0)return 1+la*rho;if(x===1&&y===1)return 1-rho;return 1;}
 function comb(n,k){let r=1;for(let i=0;i<k;i++)r=r*(n-i)/(i+1);return r;}
 function nb(k,r,mu){const p=r/(r+mu);return comb(k+Math.round(r)-1,k)*Math.pow(p,r)*Math.pow(1-p,k);}
 function matrix(lh,la){let M=[],s=0;const MX=10;for(let i=0;i<MX;i++){M[i]=[];for(let j=0;j<MX;j++){const v=pois(i,lh)*pois(j,la)*dc(i,j,lh,la);M[i][j]=v;s+=v;}}for(let i=0;i<MX;i++)for(let j=0;j<MX;j++)M[i][j]/=s;return M;}
