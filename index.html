@@ -19,8 +19,10 @@
   label{font-size:12px;color:var(--mut);display:block;margin-bottom:5px;}
   select,input{width:100%;background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px 10px;font-size:15px;}
   .comp{margin-bottom:14px;}
-  #qr .hit{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px;cursor:pointer;}
-  #qr .hit .cc{color:var(--mut);font-size:12px;margin-left:10px;text-align:right;}
+  .fld{position:relative;}
+  .cbl{display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card2);border:1px solid var(--line);border-radius:10px;max-height:240px;overflow-y:auto;z-index:30;}
+  .cbl .opt{padding:10px 12px;font-size:14px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .cbl .opt:last-child{border-bottom:none;}
   .row{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end;margin-bottom:14px;}
   .x{color:var(--mut);padding-bottom:11px;text-align:center;}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
@@ -48,11 +50,10 @@
 <h1>⚽ Preditor de Futebol</h1>
 <div id="upd" style="font-size:11px;color:var(--mut);margin:-8px 0 12px;">carregando dados…</div>
 <div class="comp"><label>Campeonato</label><select id="comp"></select></div>
-<div class="comp"><label>Buscar time (em qualquer campeonato)</label><input id="q" type="search" placeholder="ex: Flamengo, Arsenal, Brazil…" autocomplete="off"><div id="qr"></div></div>
 <div class="row">
-  <div><label id="lblH">Mandante</label><select id="home"></select></div>
+  <div class="fld"><label id="lblH">Mandante</label><input id="home" autocomplete="off" placeholder="Digite p/ filtrar…"><div id="homeList" class="cbl"></div></div>
   <div class="x">×</div>
-  <div><label id="lblA">Visitante</label><select id="away"></select></div>
+  <div class="fld"><label id="lblA">Visitante</label><input id="away" autocomplete="off" placeholder="Digite p/ filtrar…"><div id="awayList" class="cbl"></div></div>
 </div>
 <div class="stats">
   <div class="stat"><div class="l">Gols esp.</div><div class="v" id="xg">-</div></div>
@@ -90,14 +91,33 @@ function predict(comp,h,a){
 const GG=[["Resultado",[["1","{H} vence"],["X","Empate"],["2","{A} vence"],["1X","{H} ou empate"],["12","Sai vencedor"],["X2","{A} ou empate"]]],["Gols",[["o15","Over 1.5"],["o25","Over 2.5"],["o35","Over 3.5"],["btts","Ambos marcam"]]]];
 const GC=[["Escanteios",[["c85","Over 8.5"],["c95","Over 9.5"],["c105","Over 10.5"],["c115","Over 11.5"]]],["Cartoes",[["k35","Over 3.5"],["k45","Over 4.5"],["k55","Over 5.5"]]]];
 const compSel=document.getElementById('comp'),hs=document.getElementById('home'),as=document.getElementById('away');
-let slip=[];
+const hsL=document.getElementById('homeList'),asL=document.getElementById('awayList');
+let slip=[],NAMES=[],selH='',selA='';
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+function combo(inp,list,get,set){
+  const show=()=>{
+    const v=norm(inp.value.trim());
+    const its=NAMES.filter(n=>!v||norm(n).includes(v));
+    list.innerHTML='';
+    its.forEach(n=>{
+      const d=document.createElement('div');d.className='opt';d.textContent=n;
+      d.onmousedown=e=>{e.preventDefault();set(n);inp.value=n;list.style.display='none';renderMarkets();};
+      list.appendChild(d);
+    });
+    list.style.display=its.length?'block':'none';
+  };
+  inp.addEventListener('focus',()=>{inp.select();show();});
+  inp.addEventListener('input',show);
+  inp.addEventListener('blur',()=>{setTimeout(()=>{list.style.display='none';inp.value=get();},150);});
+}
+combo(hs,hsL,()=>selH,n=>selH=n);
+combo(as,asL,()=>selA,n=>selA=n);
 function fillTeams(){
   const C=ALL[compSel.value];
-  const names=Object.keys(C.times).sort((x,y)=>x.localeCompare(y,'pt'));
-  hs.innerHTML='';as.innerHTML='';
-  names.forEach(n=>{hs.add(new Option(n,n));as.add(new Option(n,n));});
-  hs.value=names[0]; as.value=names[1];
-  if(C.type==="intl"){const top=Object.keys(C.times).sort((x,y)=>(C.times[y].elo||0)-(C.times[x].elo||0));hs.value=top[0];as.value=top[1];}
+  NAMES=Object.keys(C.times).sort((x,y)=>x.localeCompare(y,'pt'));
+  selH=NAMES[0]||''; selA=NAMES[1]||'';
+  if(C.type==="intl"){const top=Object.keys(C.times).sort((x,y)=>(C.times[y].elo||0)-(C.times[x].elo||0));selH=top[0];selA=top[1];}
+  hs.value=selH; as.value=selA;
   const has=!!C.lg.hc, est=!!C.est;
   document.getElementById('boxC').style.display=has?'':'none';
   document.getElementById('boxK').style.display=has?'':'none';
@@ -107,7 +127,8 @@ function fillTeams(){
   document.getElementById('lblA').textContent=C.type==="intl"?'Selecao 2':'Visitante';
 }
 function renderMarkets(){
-  const C=ALL[compSel.value],h=hs.value,a=as.value,box=document.getElementById('markets');
+  const C=ALL[compSel.value],h=selH,a=selA,box=document.getElementById('markets');
+  if(!C.times[h]||!C.times[a])return;
   if(h===a){box.innerHTML='<p class="empty">Escolha times diferentes.</p>';return;}
   const p=predict(compSel.value,h,a);
   document.getElementById('xg').textContent=p.lh.toFixed(1)+'-'+p.la.toFixed(1);
@@ -133,7 +154,6 @@ function renderSlip(){
   box.querySelectorAll('.rm').forEach(b=>b.onclick=()=>{slip.splice(+b.dataset.i,1);renderSlip();});
 }
 compSel.onchange=()=>{fillTeams();renderMarkets();};
-hs.onchange=renderMarkets;as.onchange=renderMarkets;
 document.getElementById('clear').onclick=()=>{slip=[];renderSlip();};
 function boot(d){
   ALL=d.competitions||d;
@@ -143,28 +163,8 @@ function boot(d){
   compSel.innerHTML='';
   Object.keys(ALL).forEach(c=>compSel.add(new Option(c,c)));
   compSel.value=ALL["Copa do Mundo"]?"Copa do Mundo":Object.keys(ALL)[0];
-  IDX=[];Object.keys(ALL).forEach(c=>Object.keys(ALL[c].times).forEach(t=>IDX.push({t,c})));
   fillTeams();renderMarkets();renderSlip();
 }
-let IDX=[];
-const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
-const qIn=document.getElementById('q'),qr=document.getElementById('qr');
-qIn.addEventListener('input',()=>{
-  const v=norm(qIn.value.trim());qr.innerHTML='';
-  if(v.length<2)return;
-  IDX.filter(x=>norm(x.t).includes(v)).slice(0,10).forEach(x=>{
-    const el=document.createElement('div');el.className='hit';
-    el.innerHTML='<span>'+x.t+'</span><span class="cc">'+x.c+'</span>';
-    el.onclick=()=>{
-      compSel.value=x.c;fillTeams();
-      hs.value=x.t;
-      if(as.value===x.t){const o=[...as.options].find(o=>o.value!==x.t);if(o)as.value=o.value;}
-      renderMarkets();qIn.value='';qr.innerHTML='';
-      hs.scrollIntoView({behavior:'smooth',block:'center'});
-    };
-    qr.appendChild(el);
-  });
-});
 fetch('data.json',{cache:'no-cache'}).then(r=>{if(!r.ok)throw 0;return r.json();}).then(boot)
   .catch(()=>{document.getElementById('upd').textContent='Sem conexão e sem dados em cache — abra online uma vez.';});
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
