@@ -98,8 +98,23 @@ def _build_full(jogos):
             "cf_h": fac(acc,t,"cf_h","wh",LG["hc"]), "ca_h": fac(acc,t,"ca_h","wh",LG["ac"]),
             "cf_a": fac(acc,t,"cf_a","wa",LG["ac"]), "ca_a": fac(acc,t,"ca_a","wa",LG["hc"]),
             "kf_h": fac(acc,t,"kf_h","wh",LG["hcard"]), "kf_a": fac(acc,t,"kf_a","wa",LG["acard"])}
+    # efeito de rivalidade nos cartoes (validado por backtest: w=0.2)
+    h2h = {}
+    for j in jogos:
+        h, a = j["h"], j["a"]
+        if h not in times or a not in times: continue
+        pred = LG["hcard"]*times[h]["kf_h"] + LG["acard"]*times[a]["kf_a"]
+        key = "|".join(sorted((h, a)))
+        e = h2h.setdefault(key, [0.0, 0.0])
+        e[0] += j["w"]; e[1] += (j["hk"]+j["ak"] - pred)*j["w"]
+    pares = {}
+    for k, (sw, sr) in h2h.items():
+        if sw < 0.8: continue
+        resid = sr/sw
+        if abs(0.2*resid*sw/(sw+3.0)) < 0.08: continue
+        pares[k] = [round(sw,2), round(resid,2)]
     return {"type": "club", "lg": {k: round(v,4) for k,v in LG.items()},
-            "r_corners": round(rc,2), "times": times}
+            "r_corners": round(rc,2), "times": times, "h2h": pares}
 
 def _build_gols(jogos):
     LG = {"hg": wmean([(j["hg"], j["w"]) for j in jogos]),

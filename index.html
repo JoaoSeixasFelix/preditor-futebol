@@ -91,10 +91,11 @@ function predict(comp,h,a){
   const r=goalsMk(matrix(lh,la));
   if(!C.lg.hc) return {...r,lh,la};
   const ec=C.lg.hc*H.cf_h*A.ca_a+C.lg.ac*A.cf_a*H.ca_h;
-  const ek=C.lg.hcard*H.kf_h+C.lg.acard*A.kf_a;
+  let ek=C.lg.hcard*H.kf_h+C.lg.acard*A.kf_a, ekAdj=0;
+  if(C.h2h){const pk=C.h2h[[h,a].slice().sort().join('|')];if(pk){ekAdj=0.2*pk[1]*pk[0]/(pk[0]+3);ek=Math.max(ek+ekAdj,1);}}
   const oc=l=>{let t=0;for(let k=0;k<=l;k++)t+=nb(k,C.r_corners,ec);return 1-t;};
   const ok=l=>{let t=0;for(let k=0;k<=l;k++)t+=pois(k,ek);return 1-t;};
-  return {...r,lh,la,ec,ek,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),k35:ok(3),k45:ok(4),k55:ok(5)};
+  return {...r,lh,la,ec,ek,ekAdj,c85:oc(8),c95:oc(9),c105:oc(10),c115:oc(11),k35:ok(3),k45:ok(4),k55:ok(5)};
 }
 const GG=[["Vencedor",[["1","{H} vence",""],["X","Empate",""],["2","{A} vence",""]]],["Dupla chance",[["1X","{H} não perde","1X"],["12","Qualquer um vence","12"],["X2","{A} não perde","X2"]]],["Gols",[["o15","Over 1.5",""],["o25","Over 2.5",""],["o35","Over 3.5",""],["btts","Ambos marcam",""]]]];
 const GC=[["Escanteios",[["c85","Over 8.5"],["c95","Over 9.5"],["c105","Over 10.5"],["c115","Over 11.5"]]],["Cartoes",[["k35","Over 3.5"],["k45","Over 4.5"],["k55","Over 5.5"]]]];
@@ -150,7 +151,9 @@ function renderMarkets(){
   html+='</div>';
   let first=true;
   groups.forEach(([t,mks])=>{
-    const tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;
+    let tt=(C.est&&(t==='Escanteios'||t==='Cartoes'))?t+' (estimativa)':t;
+    if(t==='Cartoes'&&p.ekAdj>0.25)tt+=' · 🔥 rivalidade quente';
+    if(t==='Cartoes'&&p.ekAdj<-0.25)tt+=' · confronto morno';
     html+='<div class="grp"><span>'+tt+'</span>'+(first?'<span class="cols">probabilidade · odd justa</span>':'')+'</div>';first=false;
     mks.forEach(([k,lbl,cd])=>{
       const nm=lbl.replace('{H}',h).replace('{A}',a),pr=p[k],fr=(1/pr).toFixed(2);
